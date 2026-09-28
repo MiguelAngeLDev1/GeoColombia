@@ -7,6 +7,9 @@ from app.schemas.earthquake import (
     Earthquake,
     EarthquakeListResponse,
     NearbyEarthquakeResponse,
+    RecentEarthquake,
+    RecentEarthquakeListResponse,
+    LatestEarthquakeResponse,
 )
 
 
@@ -178,4 +181,93 @@ class EarthquakeService:
             radius_km=radius_km,
             count=len(earthquakes),
             data=earthquakes,
+        )
+
+    @staticmethod
+    def from_sgc_recent_event(
+        event: dict,
+    ) -> RecentEarthquake:
+        """
+        Convierte un evento del servicio Sismos Sentidos del SGC
+        al modelo interno RecentEarthquake.
+        """
+
+        timestamp = event.get("TIME_VALUE")
+
+        occurred_at = None
+
+        if timestamp is not None:
+            try:
+                occurred_at = datetime.fromtimestamp(
+                    float(timestamp),
+                    tz=timezone.utc,
+                )
+            except (TypeError, ValueError, OverflowError, OSError):
+                occurred_at = None
+
+        return RecentEarthquake(
+            id=str(event["ID_SISMO"]),
+            magnitude=event.get("MAGNITUD"),
+            depth_km=event.get("PROFUNDIDAD"),
+            occurred_at=occurred_at,
+            latitude=event.get("LATITUD"),
+            longitude=event.get("LONGITUD"),
+            location=event.get("SITIO"),
+            max_intensity=event.get("I_MAX"),
+        )
+
+
+    async def get_recent_earthquakes(
+        self,
+        limit: int = 20,
+    ) -> RecentEarthquakeListResponse:
+        """
+        Obtiene los sismos recientes publicados por el SGC,
+        los normaliza y ordena del más reciente al más antiguo.
+        """
+
+        events = await self.sgc_client.get_recent_earthquakes()
+
+        earthquakes = [
+            self.from_sgc_recent_event(event)
+            for event in events
+        ]
+
+        earthquakes.sort(
+            key=lambda earthquake: (
+                earthquake.occurred_at
+                if earthquake.occurred_at is not None
+                else datetime.min.replace(tzinfo=timezone.utc)
+            ),
+            reverse=True,
+        )
+
+        earthquakes = earthquakes[:limit]
+
+        return RecentEarthquakeListResponse(
+            source="Servicio Geológico Colombiano",
+            count=len(earthquakes),
+            data=earthquakes,
+        )
+
+    async def get_latest_earthquake(
+        self,
+    ) -> LatestEarthquakeResponse:
+        """
+        Obtiene el sismo más reciente publicado por el SGC.
+        """
+
+        recent = await self.get_recent_earthquakes(
+            limit=1,
+        )
+
+        earthquake = (
+            recent.data[0]
+            if recent.data
+            else None
+        )
+
+        return LatestEarthquakeResponse(
+            source=recent.source,
+            data=earthquake,
         )

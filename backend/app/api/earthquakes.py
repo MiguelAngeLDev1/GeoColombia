@@ -2,7 +2,9 @@ from fastapi import APIRouter, Query
 
 from app.schemas.earthquake import (
     EarthquakeListResponse,
+    LatestEarthquakeResponse,
     NearbyEarthquakeResponse,
+    RecentEarthquakeListResponse,
 )
 from app.services.earthquake_service import EarthquakeService
 
@@ -61,3 +63,36 @@ async def get_nearby_earthquakes(
         longitude=longitude,
         radius_km=radius_km,
     )
+
+@router.get(
+    "/recent",
+    response_model=RecentEarthquakeListResponse,
+)
+async def get_recent_earthquakes(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Número máximo de sismos recientes a retornar",
+    ),
+):
+    """
+    Obtiene los sismos recientes publicados por el
+    Servicio Geológico Colombiano.
+    """
+
+    return await earthquake_service.get_recent_earthquakes(
+        limit=limit,
+    )
+
+@router.get(
+    "/latest",
+    response_model=LatestEarthquakeResponse,
+)
+async def get_latest_earthquake():
+    """
+    Obtiene el sismo más reciente publicado por el
+    Servicio Geológico Colombiano.
+    """
+
+    return await earthquake_service.get_latest_earthquake()

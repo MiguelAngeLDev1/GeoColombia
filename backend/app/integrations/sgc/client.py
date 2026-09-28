@@ -8,6 +8,9 @@ SGC_EARTHQUAKES_URL = (
     "catalogo_sismos/catalogo_de_sismos_2/FeatureServer/0/query"
 )
 
+SGC_FELT_EARTHQUAKES_BASE_URL = (
+    "https://sismosentido.sgc.gov.co/rest"
+)
 
 EARTHQUAKE_FIELDS = (
     "ESP_ID_EVENTO_TXT,"
@@ -121,6 +124,63 @@ class SGCClient:
                     "message",
                     "Unknown SGC error",
                 ),
+            )
+
+        return data
+
+    async def get_recent_earthquakes(
+        self,
+    ) -> list[dict]:
+        """
+        Obtiene el listado de sismos recientes publicados
+        por el servicio Sismos Sentidos del SGC.
+        """
+
+        url = (
+            f"{SGC_FELT_EARTHQUAKES_BASE_URL}/"
+            "resumenSismosConIntensidadBatch/-1"
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(url)
+
+                response.raise_for_status()
+
+        except httpx.TimeoutException as exc:
+            raise ExternalServiceError(
+                service="SGC",
+                message="SGC recent earthquakes request timed out",
+            ) from exc
+
+        except httpx.HTTPStatusError as exc:
+            raise ExternalServiceError(
+                service="SGC",
+                message=(
+                    "SGC recent earthquakes returned HTTP "
+                    f"{exc.response.status_code}"
+                ),
+            ) from exc
+
+        except httpx.RequestError as exc:
+            raise ExternalServiceError(
+                service="SGC",
+                message="Could not connect to SGC recent earthquakes service",
+            ) from exc
+
+        try:
+            data = response.json()
+
+        except ValueError as exc:
+            raise ExternalServiceError(
+                service="SGC",
+                message="SGC recent earthquakes returned invalid JSON",
+            ) from exc
+
+        if not isinstance(data, list):
+            raise ExternalServiceError(
+                service="SGC",
+                message="SGC recent earthquakes returned an unexpected response",
             )
 
         return data

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.services.earthquake_service import EarthquakeService
+from app.schemas.earthquake import RecentEarthquake
 
 
 def test_from_sgc_feature_normalizes_earthquake():
@@ -134,3 +135,113 @@ async def test_get_nearby_earthquakes_orders_by_distance(
         result.data[0].distance_km
         < result.data[1].distance_km
     )
+
+
+def test_from_sgc_recent_event_normalizes_earthquake():
+    event = {
+        "ID_SISMO": "SGC2026taucow",
+        "SITIO": "Chaparral - Tolima, Colombia",
+        "FECHA": "27/09/2026 - 07:57 AM",
+        "MAGNITUD": 3.8,
+        "PROFUNDIDAD": 16,
+        "LATITUD": 3.84,
+        "LONGITUD": -75.64,
+        "I_MAX": 4,
+        "TIME_VALUE": 1790513836,
+    }
+
+    earthquake = EarthquakeService.from_sgc_recent_event(event)
+
+    assert earthquake.id == "SGC2026taucow"
+    assert earthquake.magnitude == 3.8
+    assert earthquake.depth_km == 16
+    assert earthquake.latitude == 3.84
+    assert earthquake.longitude == -75.64
+    assert earthquake.location == "Chaparral - Tolima, Colombia"
+    assert earthquake.max_intensity == 4
+    assert earthquake.occurred_at is not None
+
+
+@pytest.mark.asyncio
+async def test_get_recent_earthquakes_orders_and_limits(monkeypatch):
+    service = EarthquakeService()
+
+    async def mock_get_recent_earthquakes():
+        return [
+            {
+                "ID_SISMO": "SGC2026OLDER",
+                "SITIO": "Evento anterior",
+                "MAGNITUD": 2.5,
+                "PROFUNDIDAD": 10,
+                "LATITUD": 4.0,
+                "LONGITUD": -75.0,
+                "I_MAX": 2,
+                "TIME_VALUE": 1790000000,
+            },
+            {
+                "ID_SISMO": "SGC2026NEWER",
+                "SITIO": "Evento reciente",
+                "MAGNITUD": 3.8,
+                "PROFUNDIDAD": 16,
+                "LATITUD": 3.84,
+                "LONGITUD": -75.64,
+                "I_MAX": 4,
+                "TIME_VALUE": 1790513836,
+            },
+        ]
+
+    monkeypatch.setattr(
+        service.sgc_client,
+        "get_recent_earthquakes",
+        mock_get_recent_earthquakes,
+    )
+
+    result = await service.get_recent_earthquakes(
+        limit=1,
+    )
+
+    assert result.count == 1
+    assert len(result.data) == 1
+    assert result.data[0].id == "SGC2026NEWER"    
+
+
+@pytest.mark.asyncio
+async def test_get_latest_earthquake_returns_most_recent(monkeypatch):
+    service = EarthquakeService()
+
+    async def mock_get_recent_earthquakes():
+        return [
+            {
+                "ID_SISMO": "SGC2026OLDER",
+                "SITIO": "Evento anterior",
+                "MAGNITUD": 2.5,
+                "PROFUNDIDAD": 10,
+                "LATITUD": 4.0,
+                "LONGITUD": -75.0,
+                "I_MAX": 2,
+                "TIME_VALUE": 1790000000,
+            },
+            {
+                "ID_SISMO": "SGC2026LATEST",
+                "SITIO": "Evento más reciente",
+                "MAGNITUD": 3.1,
+                "PROFUNDIDAD": 16,
+                "LATITUD": 3.84,
+                "LONGITUD": -75.64,
+                "I_MAX": 5,
+                "TIME_VALUE": 1790550216,
+            },
+        ]
+
+    monkeypatch.setattr(
+        service.sgc_client,
+        "get_recent_earthquakes",
+        mock_get_recent_earthquakes,
+    )
+
+    result = await service.get_latest_earthquake()
+
+    assert result.data is not None
+    assert result.data.id == "SGC2026LATEST"
+    assert result.data.magnitude == 3.1
+    assert result.data.max_intensity == 5

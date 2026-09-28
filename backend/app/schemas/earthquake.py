@@ -32,3 +32,24 @@ class NearbyEarthquakeResponse(BaseModel):
     radius_km: float
     count: int
     data: list[Earthquake]
+
+class RecentEarthquake(BaseModel):
+    id: str
+    magnitude: float | None = None
+    depth_km: float | None = None
+    occurred_at: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    location: str | None = None
+    max_intensity: int | None = None
+
+
+class RecentEarthquakeListResponse(BaseModel):
+    source: str
+    count: int
+    data: list[RecentEarthquake]
+
+
+class LatestEarthquakeResponse(BaseModel):
+    source: str
+    data: RecentEarthquake | None
