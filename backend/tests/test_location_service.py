@@ -165,3 +165,121 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
 
     assert earthquake.id == 24051
     assert earthquake.distance_km == 5.0
+
+
+@pytest.mark.asyncio
+async def test_get_location_context_limits_returned_earthquakes(
+    monkeypatch,
+):
+    service = LocationService()
+
+    async def mock_get_territory_at_point(
+        latitude: float,
+        longitude: float,
+    ):
+        from app.schemas.territory import (
+            Department,
+            Municipality,
+            TerritoryResponse,
+        )
+
+        return TerritoryResponse(
+            source="DANE - Marco Geoestadístico Nacional",
+            coordinates={
+                "latitude": latitude,
+                "longitude": longitude,
+            },
+            department=Department(
+                code="73",
+                name="Tolima",
+            ),
+            municipality=Municipality(
+                code="73168",
+                name="Chaparral",
+                type="Municipio",
+                area_km2=2101.53,
+            ),
+            reference_year=2024,
+        )
+
+    async def mock_get_titles_at_point(
+        latitude: float,
+        longitude: float,
+    ):
+        from app.schemas.mining import MiningTitleListResponse
+
+        return MiningTitleListResponse(
+            source="Agencia Nacional de Minería",
+            coordinates={
+                "latitude": latitude,
+                "longitude": longitude,
+            },
+            count=0,
+            data=[],
+        )
+
+    async def mock_get_nearby_earthquakes(
+        latitude: float,
+        longitude: float,
+        radius_km: float,
+    ):
+        from app.schemas.earthquake import (
+            Coordinates,
+            Earthquake,
+            NearbyEarthquakeResponse,
+        )
+
+        earthquakes = [
+            Earthquake(
+                id=index,
+                magnitude=3.0,
+                depth_km=10.0,
+                occurred_at=None,
+                latitude=latitude,
+                longitude=longitude,
+                municipality_code="73168",
+                department_code="73",
+                distance_km=float(index),
+            )
+            for index in range(1, 21)
+        ]
+
+        return NearbyEarthquakeResponse(
+            source="Servicio Geológico Colombiano",
+            center=Coordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            radius_km=radius_km,
+            count=20,
+            data=earthquakes,
+        )
+
+    monkeypatch.setattr(
+        service.territory_service,
+        "get_territory_at_point",
+        mock_get_territory_at_point,
+    )
+
+    monkeypatch.setattr(
+        service.mining_service,
+        "get_titles_at_point",
+        mock_get_titles_at_point,
+    )
+
+    monkeypatch.setattr(
+        service.earthquake_service,
+        "get_nearby_earthquakes",
+        mock_get_nearby_earthquakes,
+    )
+
+    result = await service.get_location_context(
+        latitude=3.87,
+        longitude=-75.63,
+        radius_km=50,
+        earthquake_limit=5,
+    )
+
+    assert result.seismic.count == 20
+    assert result.seismic.returned == 5
+    assert len(result.seismic.earthquakes) == 5

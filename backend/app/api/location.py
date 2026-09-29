@@ -38,11 +38,24 @@ async def get_location_context(
         le=500,
         description="Radio para consultar actividad sísmica",
     ),
+    earthquake_limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+        description="Cantidad máxima de sismos a retornar",
+    ),
 ):
+    """
+    Obtiene el contexto de una ubicación combinando información
+    territorial del DANE, títulos mineros de la ANM y actividad
+    sísmica del SGC.
+    """
+
     return await location_service.get_location_context(
         latitude=latitude,
         longitude=longitude,
         radius_km=radius_km,
+        earthquake_limit=earthquake_limit,
     )
 
 

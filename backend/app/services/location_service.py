@@ -24,6 +24,7 @@ class LocationService:
         latitude: float,
         longitude: float,
         radius_km: float = 50,
+        earthquake_limit: int = 10,
     ) -> LocationContextResponse:
         """
         Obtiene el contexto de una coordenada consultando
@@ -50,6 +51,8 @@ class LocationService:
             ),
         )
 
+        earthquakes = seismic_result.data[:earthquake_limit]
+
         return LocationContextResponse(
             location=LocationCoordinates(
                 latitude=latitude,
@@ -68,6 +71,7 @@ class LocationService:
             seismic=SeismicContext(
                 radius_km=seismic_result.radius_km,
                 count=seismic_result.count,
-                earthquakes=seismic_result.data,
+                returned=len(earthquakes),
+                earthquakes=earthquakes,
             ),
         )

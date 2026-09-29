@@ -25,6 +25,7 @@ class MiningContext(BaseModel):
 class SeismicContext(BaseModel):
     radius_km: float
     count: int
+    returned: int
     earthquakes: list[Earthquake]
 
 
