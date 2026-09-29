@@ -9,14 +9,43 @@ from app.schemas.mining import (
     MiningTitle,
     MiningTitleListResponse,
 )
+from app.schemas.territory import (
+    Department,
+    Municipality,
+    TerritoryCoordinates,
+    TerritoryResponse,
+)
 from app.services.location_service import LocationService
 
 
 @pytest.mark.asyncio
-async def test_get_location_context_combines_mining_and_seismic_data(
+async def test_get_location_context_combines_territory_mining_and_seismic_data(
     monkeypatch,
 ):
     service = LocationService()
+
+    async def mock_get_territory_at_point(
+        latitude: float,
+        longitude: float,
+    ):
+        return TerritoryResponse(
+            source="DANE - Marco Geoestadístico Nacional",
+            coordinates=TerritoryCoordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            department=Department(
+                code="54",
+                name="Norte De Santander",
+            ),
+            municipality=Municipality(
+                code="54720",
+                name="Sardinata",
+                type="Municipio",
+                area_km2=1451.17,
+            ),
+            reference_year=2024,
+        )
 
     async def mock_get_titles_at_point(
         latitude: float,
@@ -73,6 +102,12 @@ async def test_get_location_context_combines_mining_and_seismic_data(
         )
 
     monkeypatch.setattr(
+        service.territory_service,
+        "get_territory_at_point",
+        mock_get_territory_at_point,
+    )
+
+    monkeypatch.setattr(
         service.mining_service,
         "get_titles_at_point",
         mock_get_titles_at_point,
@@ -93,6 +128,19 @@ async def test_get_location_context_combines_mining_and_seismic_data(
     # Coordenada consultada
     assert result.location.latitude == 8.3665
     assert result.location.longitude == -72.86
+
+    # Contexto territorial
+    assert result.territory.department is not None
+    assert result.territory.department.code == "54"
+    assert result.territory.department.name == "Norte De Santander"
+
+    assert result.territory.municipality is not None
+    assert result.territory.municipality.code == "54720"
+    assert result.territory.municipality.name == "Sardinata"
+    assert result.territory.municipality.type == "Municipio"
+    assert result.territory.municipality.area_km2 == 1451.17
+
+    assert result.territory.reference_year == 2024
 
     # Contexto minero
     assert result.mining.has_titles is True
