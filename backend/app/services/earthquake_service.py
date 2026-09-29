@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
 
@@ -5,11 +6,15 @@ from app.integrations.sgc.client import SGCClient
 from app.schemas.earthquake import (
     Coordinates,
     Earthquake,
+    EarthquakeDetail,
+    EarthquakeDetailResponse,
     EarthquakeListResponse,
+    EarthquakeReports,
+    FeltLocation,
+    LatestEarthquakeResponse,
     NearbyEarthquakeResponse,
     RecentEarthquake,
     RecentEarthquakeListResponse,
-    LatestEarthquakeResponse,
 )
 
 
@@ -216,7 +221,6 @@ class EarthquakeService:
             max_intensity=event.get("I_MAX"),
         )
 
-
     async def get_recent_earthquakes(
         self,
         limit: int = 20,
@@ -270,4 +274,167 @@ class EarthquakeService:
         return LatestEarthquakeResponse(
             source=recent.source,
             data=earthquake,
+        )
+
+    @staticmethod
+    def safe_float(value) -> float | None:
+        """
+        Convierte un valor a float de forma segura.
+        """
+
+        if value is None or value == "":
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def safe_int(value) -> int | None:
+        """
+        Convierte un valor a int de forma segura.
+        """
+
+        if value is None or value == "":
+            return None
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def parse_felt_earthquake_datetime(
+        value: str | None,
+    ) -> datetime | None:
+        """
+        Convierte las fechas utilizadas por Sismos Sentidos
+        a datetime UTC.
+        """
+
+        if not value:
+            return None
+
+        formats = (
+            "%d/%m/%Y %H:%M:%S",
+            "%Y/%m/%d %I:%M:%S %p",
+        )
+
+        for date_format in formats:
+            try:
+                parsed = datetime.strptime(
+                    value,
+                    date_format,
+                )
+
+                return parsed.replace(
+                    tzinfo=timezone.utc,
+                )
+            except ValueError:
+                continue
+
+        return None
+
+    @classmethod
+    def from_sgc_felt_location(
+        cls,
+        data: dict,
+    ) -> FeltLocation:
+        """
+        Normaliza un lugar donde un sismo fue reportado
+        como sentido.
+        """
+
+        return FeltLocation(
+            municipality=data.get("MUNICIPIO"),
+            population_center=data.get(
+                "NOMBRE_CENTRO_POBLADO"
+            ),
+            municipality_code=cls.safe_int(
+                data.get("COD_MUNICIPIO")
+            ),
+            population_center_code=cls.safe_int(
+                data.get("COD_CENTRO_POBLADO")
+            ),
+            distance_km=cls.safe_float(
+                data.get("DIST")
+            ),
+            intensity=cls.safe_int(
+                data.get("INT_RED")
+            ),
+            reports=cls.safe_int(
+                data.get("CONTEO")
+            ) or 0,
+            latitude=cls.safe_float(
+                data.get("LATITUD")
+            ),
+            longitude=cls.safe_float(
+                data.get("LONGITUD")
+            ),
+        )
+
+    async def get_earthquake_detail(
+        self,
+        earthquake_id: str,
+    ) -> EarthquakeDetailResponse:
+        """
+        Obtiene y combina el resumen, número de reportes
+        y lugares donde fue sentido un sismo.
+        """
+
+        summary, report_count, felt_locations = await asyncio.gather(
+            self.sgc_client.get_earthquake_summary(
+                earthquake_id
+            ),
+            self.sgc_client.get_earthquake_report_count(
+                earthquake_id
+            ),
+            self.sgc_client.get_earthquake_felt_locations(
+                earthquake_id
+            ),
+        )
+
+        occurred_at = self.parse_felt_earthquake_datetime(
+            summary.get("fecha")
+        )
+
+        locations = [
+            self.from_sgc_felt_location(location)
+            for location in felt_locations
+        ]
+
+        detail = EarthquakeDetail(
+            id=str(
+                summary.get("ID")
+                or earthquake_id
+            ),
+            magnitude=self.safe_float(
+                summary.get("magnitud")
+            ),
+            depth_km=self.safe_float(
+                summary.get("profundidad")
+            ),
+            occurred_at=occurred_at,
+            latitude=self.safe_float(
+                summary.get("latitud")
+            ),
+            longitude=self.safe_float(
+                summary.get("longitud")
+            ),
+            location=summary.get("sitio"),
+            reports=EarthquakeReports(
+                count=self.safe_int(
+                    report_count.get("CONTEO")
+                ) or 0,
+                population_centers=self.safe_int(
+                    report_count.get("NUM_CPS")
+                ) or 0,
+            ),
+            felt_locations=locations,
+        )
+
+        return EarthquakeDetailResponse(
+            source="Servicio Geológico Colombiano",
+            data=detail,
         )

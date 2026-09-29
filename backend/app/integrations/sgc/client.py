@@ -70,6 +70,108 @@ class SGCClient:
 
         return data.get("features", [])
 
+    async def get_recent_earthquakes(self) -> list[dict]:
+        """
+        Obtiene el listado de sismos recientes publicados
+        por el servicio Sismos Sentidos del SGC.
+        """
+
+        url = (
+            f"{SGC_FELT_EARTHQUAKES_BASE_URL}/"
+            "resumenSismosConIntensidadBatch/-1"
+        )
+
+        data = await self._request_json(url)
+
+        if not isinstance(data, list):
+            raise ExternalServiceError(
+                service="SGC",
+                message=(
+                    "SGC recent earthquakes returned "
+                    "an unexpected response"
+                ),
+            )
+
+        return data
+
+    async def get_earthquake_summary(
+        self,
+        earthquake_id: str,
+    ) -> dict:
+        """
+        Obtiene el resumen principal de un sismo
+        publicado por Sismos Sentidos del SGC.
+        """
+
+        url = (
+            f"{SGC_FELT_EARTHQUAKES_BASE_URL}/"
+            f"resumenSismo/{earthquake_id}"
+        )
+
+        data = await self._request_json(url)
+
+        if not isinstance(data, dict):
+            raise ExternalServiceError(
+                service="SGC",
+                message="SGC earthquake summary returned an unexpected response",
+            )
+
+        return data
+
+    async def get_earthquake_report_count(
+        self,
+        earthquake_id: str,
+    ) -> dict:
+        """
+        Obtiene el número de reportes y centros poblados
+        asociados a un sismo.
+        """
+
+        url = (
+            f"{SGC_FELT_EARTHQUAKES_BASE_URL}/"
+            f"conteoReportes/{earthquake_id}"
+        )
+
+        data = await self._request_json(url)
+
+        if not isinstance(data, dict):
+            raise ExternalServiceError(
+                service="SGC",
+                message=(
+                    "SGC earthquake report count returned "
+                    "an unexpected response"
+                ),
+            )
+
+        return data
+
+    async def get_earthquake_felt_locations(
+        self,
+        earthquake_id: str,
+    ) -> list[dict]:
+        """
+        Obtiene los lugares donde fue reportado como sentido
+        un sismo y sus intensidades.
+        """
+
+        url = (
+            f"{SGC_FELT_EARTHQUAKES_BASE_URL}/"
+            f"tabla/{earthquake_id}"
+        )
+
+        data = await self._request_json(url)
+
+        if not isinstance(data, list):
+            raise ExternalServiceError(
+                service="SGC",
+                message=(
+                    "SGC felt locations returned "
+                    "an unexpected response"
+                ),
+            )
+
+        return data
+
     async def _request(
         self,
         params: dict,
@@ -128,18 +230,14 @@ class SGCClient:
 
         return data
 
-    async def get_recent_earthquakes(
+    async def _request_json(
         self,
-    ) -> list[dict]:
+        url: str,
+    ) -> dict | list:
         """
-        Obtiene el listado de sismos recientes publicados
-        por el servicio Sismos Sentidos del SGC.
+        Ejecuta una petición GET a los servicios JSON
+        de Sismos Sentidos del SGC.
         """
-
-        url = (
-            f"{SGC_FELT_EARTHQUAKES_BASE_URL}/"
-            "resumenSismosConIntensidadBatch/-1"
-        )
 
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
@@ -150,37 +248,26 @@ class SGCClient:
         except httpx.TimeoutException as exc:
             raise ExternalServiceError(
                 service="SGC",
-                message="SGC recent earthquakes request timed out",
+                message="SGC request timed out",
             ) from exc
 
         except httpx.HTTPStatusError as exc:
             raise ExternalServiceError(
                 service="SGC",
-                message=(
-                    "SGC recent earthquakes returned HTTP "
-                    f"{exc.response.status_code}"
-                ),
+                message=f"SGC returned HTTP {exc.response.status_code}",
             ) from exc
 
         except httpx.RequestError as exc:
             raise ExternalServiceError(
                 service="SGC",
-                message="Could not connect to SGC recent earthquakes service",
+                message="Could not connect to SGC",
             ) from exc
 
         try:
-            data = response.json()
+            return response.json()
 
         except ValueError as exc:
             raise ExternalServiceError(
                 service="SGC",
-                message="SGC recent earthquakes returned invalid JSON",
+                message="SGC returned an invalid JSON response",
             ) from exc
-
-        if not isinstance(data, list):
-            raise ExternalServiceError(
-                service="SGC",
-                message="SGC recent earthquakes returned an unexpected response",
-            )
-
-        return data

@@ -245,3 +245,109 @@ async def test_get_latest_earthquake_returns_most_recent(monkeypatch):
     assert result.data.id == "SGC2026LATEST"
     assert result.data.magnitude == 3.1
     assert result.data.max_intensity == 5
+
+@pytest.mark.asyncio
+async def test_get_earthquake_detail_combines_sgc_data(
+    monkeypatch,
+):
+    service = EarthquakeService()
+
+    earthquake_id = "SGC2026tbskuv"
+
+    async def mock_get_earthquake_summary(
+        earthquake_id: str,
+    ):
+        return {
+            "fecha": "27/09/2026 20:10:59",
+            "latitud": "3.23",
+            "longitud": "-75.88",
+            "sitio": "Rioblanco - Tolima, Colombia",
+            "profundidad": "5",
+            "magnitud": 2.8,
+            "fecha_formato2": "2026/09/27 08:10:59 PM",
+            "ID": earthquake_id,
+        }
+
+    async def mock_get_earthquake_report_count(
+        earthquake_id: str,
+    ):
+        return {
+            "NUM_CPS": "3",
+            "CONTEO": 5,
+        }
+
+    async def mock_get_earthquake_felt_locations(
+        earthquake_id: str,
+    ):
+        return [
+            {
+                "ID_CENTRO_POBLADO": 73555001,
+                "DIST": 16.38,
+                "COD_MUNICIPIO": 73555,
+                "COD_CENTRO_POBLADO": 73555001,
+                "INT_RED": 2,
+                "LONGITUD": -75.75,
+                "MUNICIPIO": "PLANADAS, TOLIMA",
+                "CONTEO": 3,
+                "NOMBRE_CENTRO_POBLADO": "BILBAO",
+                "LATITUD": 3.28,
+            }
+        ]
+
+    monkeypatch.setattr(
+        service.sgc_client,
+        "get_earthquake_summary",
+        mock_get_earthquake_summary,
+    )
+
+    monkeypatch.setattr(
+        service.sgc_client,
+        "get_earthquake_report_count",
+        mock_get_earthquake_report_count,
+    )
+
+    monkeypatch.setattr(
+        service.sgc_client,
+        "get_earthquake_felt_locations",
+        mock_get_earthquake_felt_locations,
+    )
+
+    result = await service.get_earthquake_detail(
+        earthquake_id
+    )
+
+    assert result.source == "Servicio Geológico Colombiano"
+
+    detail = result.data
+
+    assert detail.id == earthquake_id
+    assert detail.magnitude == 2.8
+    assert detail.depth_km == 5.0
+    assert detail.latitude == 3.23
+    assert detail.longitude == -75.88
+    assert detail.location == "Rioblanco - Tolima, Colombia"
+
+    assert detail.occurred_at is not None
+    assert detail.occurred_at.year == 2026
+    assert detail.occurred_at.month == 9
+    assert detail.occurred_at.day == 27
+    assert detail.occurred_at.hour == 20
+    assert detail.occurred_at.minute == 10
+    assert detail.occurred_at.second == 59
+
+    assert detail.reports.count == 5
+    assert detail.reports.population_centers == 3
+
+    assert len(detail.felt_locations) == 1
+
+    felt_location = detail.felt_locations[0]
+
+    assert felt_location.municipality == "PLANADAS, TOLIMA"
+    assert felt_location.population_center == "BILBAO"
+    assert felt_location.municipality_code == 73555
+    assert felt_location.population_center_code == 73555001
+    assert felt_location.distance_km == 16.38
+    assert felt_location.intensity == 2
+    assert felt_location.reports == 3
+    assert felt_location.latitude == 3.28
+    assert felt_location.longitude == -75.75

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
 
 from app.schemas.earthquake import (
+    EarthquakeDetailResponse,
     EarthquakeListResponse,
     LatestEarthquakeResponse,
     NearbyEarthquakeResponse,
@@ -96,3 +97,20 @@ async def get_latest_earthquake():
     """
 
     return await earthquake_service.get_latest_earthquake()
+
+@router.get(
+    "/{earthquake_id}",
+    response_model=EarthquakeDetailResponse,
+)
+async def get_earthquake_detail(
+    earthquake_id: str,
+):
+    """
+    Obtiene el detalle de un sismo publicado por el SGC,
+    incluyendo resumen, reportes ciudadanos y lugares
+    donde fue sentido.
+    """
+
+    return await earthquake_service.get_earthquake_detail(
+        earthquake_id
+    )
