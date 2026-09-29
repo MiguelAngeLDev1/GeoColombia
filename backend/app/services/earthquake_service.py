@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from math import asin, cos, radians, sin, sqrt
+from app.services.territory_service import TerritoryService
 
 from app.integrations.sgc.client import SGCClient
 from app.schemas.earthquake import (
@@ -10,6 +11,7 @@ from app.schemas.earthquake import (
     EarthquakeDetailResponse,
     EarthquakeListResponse,
     EarthquakeReports,
+    EarthquakeTerritory,
     FeltLocation,
     LatestEarthquakeResponse,
     NearbyEarthquakeResponse,
@@ -17,11 +19,11 @@ from app.schemas.earthquake import (
     RecentEarthquakeListResponse,
 )
 
-
 class EarthquakeService:
 
     def __init__(self):
         self.sgc_client = SGCClient()
+        self.territory_service = TerritoryService()
 
     @staticmethod
     def timestamp_ms_to_datetime(
@@ -64,6 +66,8 @@ class EarthquakeService:
         occurred_at = EarthquakeService.timestamp_ms_to_datetime(
             attributes.get("ESP_FECHA_LONG")
         )
+
+        
 
         return Earthquake(
             id=attributes["ESP_ID_EVENTO_TXT"],
@@ -379,8 +383,9 @@ class EarthquakeService:
         earthquake_id: str,
     ) -> EarthquakeDetailResponse:
         """
-        Obtiene y combina el resumen, número de reportes
-        y lugares donde fue sentido un sismo.
+        Obtiene y combina el resumen, número de reportes,
+        lugares donde fue sentido un sismo y su contexto
+        territorial oficial según DANE.
         """
 
         summary, report_count, felt_locations = await asyncio.gather(
@@ -399,6 +404,41 @@ class EarthquakeService:
             summary.get("fecha")
         )
 
+        latitude = self.safe_float(
+            summary.get("latitud")
+        )
+
+        longitude = self.safe_float(
+            summary.get("longitud")
+        )
+
+        # Enriquecimiento territorial con DANE.
+        # Si DANE no encuentra el punto o falla temporalmente,
+        # el detalle sísmico del SGC continúa funcionando.
+        territory = None
+
+        if latitude is not None and longitude is not None:
+            try:
+                territory_result = (
+                    await self.territory_service.get_territory_at_point(
+                        latitude=latitude,
+                        longitude=longitude,
+                    )
+                )
+
+                if (
+                    territory_result.department is not None
+                    or territory_result.municipality is not None
+                ):
+                    territory = EarthquakeTerritory(
+                        department=territory_result.department,
+                        municipality=territory_result.municipality,
+                        reference_year=territory_result.reference_year,
+                    )
+
+            except Exception:
+                territory = None
+
         locations = [
             self.from_sgc_felt_location(location)
             for location in felt_locations
@@ -416,13 +456,10 @@ class EarthquakeService:
                 summary.get("profundidad")
             ),
             occurred_at=occurred_at,
-            latitude=self.safe_float(
-                summary.get("latitud")
-            ),
-            longitude=self.safe_float(
-                summary.get("longitud")
-            ),
+            latitude=latitude,
+            longitude=longitude,
             location=summary.get("sitio"),
+            territory=territory,
             reports=EarthquakeReports(
                 count=self.safe_int(
                     report_count.get("CONTEO")

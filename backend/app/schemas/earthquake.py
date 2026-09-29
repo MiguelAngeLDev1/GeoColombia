@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.territory import Department, Municipality
 
 class Earthquake(BaseModel):
     id: int
@@ -72,6 +73,10 @@ class EarthquakeReports(BaseModel):
     population_centers: int = 0
 
 
+class EarthquakeTerritory(BaseModel):
+    department: Department | None = None
+    municipality: Municipality | None = None
+    reference_year: int | None = None
 class EarthquakeDetail(BaseModel):
     id: str
     magnitude: float | None = None
@@ -80,6 +85,7 @@ class EarthquakeDetail(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     location: str | None = None
+    territory: EarthquakeTerritory | None = None
     reports: EarthquakeReports
     felt_locations: list[FeltLocation]
 
@@ -87,3 +93,4 @@ class EarthquakeDetail(BaseModel):
 class EarthquakeDetailResponse(BaseModel):
     source: str
     data: EarthquakeDetail
+
