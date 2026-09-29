@@ -1,9 +1,13 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from app.schemas.earthquake import (
     Coordinates,
     Earthquake,
     NearbyEarthquakeResponse,
+    RecentEarthquake,
+    RecentEarthquakeListResponse,
 )
 from app.schemas.mining import (
     MiningTitle,
@@ -101,6 +105,34 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
             ],
         )
 
+    async def mock_get_recent_earthquakes(
+        limit: int = 20,
+    ):
+        return RecentEarthquakeListResponse(
+            source="Servicio Geológico Colombiano",
+            count=1,
+            data=[
+                RecentEarthquake(
+                    id="SGC2026test001",
+                    magnitude=3.2,
+                    depth_km=12.0,
+                    occurred_at=datetime(
+                        2026,
+                        9,
+                        29,
+                        3,
+                        24,
+                        5,
+                        tzinfo=timezone.utc,
+                    ),
+                    latitude=8.37,
+                    longitude=-72.86,
+                    location="Sardinata - Norte de Santander, Colombia",
+                    max_intensity=3,
+                )
+            ],
+        )
+
     monkeypatch.setattr(
         service.territory_service,
         "get_territory_at_point",
@@ -117,6 +149,12 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
         service.earthquake_service,
         "get_nearby_earthquakes",
         mock_get_nearby_earthquakes,
+    )
+
+    monkeypatch.setattr(
+        service.earthquake_service,
+        "get_recent_earthquakes",
+        mock_get_recent_earthquakes,
     )
 
     result = await service.get_location_context(
@@ -156,15 +194,32 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
     assert mining_title.departments == "Norte de Santander"
     assert mining_title.municipalities == "SARDINATA"
 
-    # Contexto sísmico
+    # Catálogo sísmico histórico
     assert result.seismic.radius_km == 50
     assert result.seismic.count == 1
+    assert result.seismic.returned == 1
     assert len(result.seismic.earthquakes) == 1
 
     earthquake = result.seismic.earthquakes[0]
 
     assert earthquake.id == 24051
     assert earthquake.distance_km == 5.0
+
+    # Sismicidad reciente
+    assert result.seismic.recent.count == 1
+    assert result.seismic.recent.returned == 1
+    assert len(result.seismic.recent.earthquakes) == 1
+
+    recent_earthquake = result.seismic.recent.earthquakes[0]
+
+    assert recent_earthquake.id == "SGC2026test001"
+    assert recent_earthquake.magnitude == 3.2
+    assert recent_earthquake.distance_km is not None
+    assert recent_earthquake.distance_km <= 50
+    assert recent_earthquake.distance_km == round(
+        recent_earthquake.distance_km,
+        2,
+    )
 
 
 @pytest.mark.asyncio
@@ -177,18 +232,12 @@ async def test_get_location_context_limits_returned_earthquakes(
         latitude: float,
         longitude: float,
     ):
-        from app.schemas.territory import (
-            Department,
-            Municipality,
-            TerritoryResponse,
-        )
-
         return TerritoryResponse(
             source="DANE - Marco Geoestadístico Nacional",
-            coordinates={
-                "latitude": latitude,
-                "longitude": longitude,
-            },
+            coordinates=TerritoryCoordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
             department=Department(
                 code="73",
                 name="Tolima",
@@ -206,8 +255,6 @@ async def test_get_location_context_limits_returned_earthquakes(
         latitude: float,
         longitude: float,
     ):
-        from app.schemas.mining import MiningTitleListResponse
-
         return MiningTitleListResponse(
             source="Agencia Nacional de Minería",
             coordinates={
@@ -223,12 +270,6 @@ async def test_get_location_context_limits_returned_earthquakes(
         longitude: float,
         radius_km: float,
     ):
-        from app.schemas.earthquake import (
-            Coordinates,
-            Earthquake,
-            NearbyEarthquakeResponse,
-        )
-
         earthquakes = [
             Earthquake(
                 id=index,
@@ -255,6 +296,37 @@ async def test_get_location_context_limits_returned_earthquakes(
             data=earthquakes,
         )
 
+    async def mock_get_recent_earthquakes(
+        limit: int = 20,
+    ):
+        earthquakes = [
+            RecentEarthquake(
+                id=f"SGC2026test{index:03d}",
+                magnitude=3.0,
+                depth_km=10.0,
+                occurred_at=datetime(
+                    2026,
+                    9,
+                    29,
+                    index,
+                    0,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
+                latitude=3.87,
+                longitude=-75.63,
+                location="Chaparral - Tolima, Colombia",
+                max_intensity=3,
+            )
+            for index in range(1, 11)
+        ]
+
+        return RecentEarthquakeListResponse(
+            source="Servicio Geológico Colombiano",
+            count=10,
+            data=earthquakes,
+        )
+
     monkeypatch.setattr(
         service.territory_service,
         "get_territory_at_point",
@@ -273,13 +345,40 @@ async def test_get_location_context_limits_returned_earthquakes(
         mock_get_nearby_earthquakes,
     )
 
+    monkeypatch.setattr(
+        service.earthquake_service,
+        "get_recent_earthquakes",
+        mock_get_recent_earthquakes,
+    )
+
     result = await service.get_location_context(
         latitude=3.87,
         longitude=-75.63,
         radius_km=50,
         earthquake_limit=5,
+        recent_earthquake_limit=3,
     )
 
+    # El catálogo encontró 20, pero devolvemos 5
     assert result.seismic.count == 20
     assert result.seismic.returned == 5
     assert len(result.seismic.earthquakes) == 5
+
+    # Hay 10 recientes dentro del radio, pero devolvemos 3
+    assert result.seismic.recent.count == 10
+    assert result.seismic.recent.returned == 3
+    assert len(result.seismic.recent.earthquakes) == 3
+
+    # Deben quedar ordenados del más reciente al más antiguo
+    assert result.seismic.recent.earthquakes[0].id == "SGC2026test010"
+    assert result.seismic.recent.earthquakes[1].id == "SGC2026test009"
+    assert result.seismic.recent.earthquakes[2].id == "SGC2026test008"
+
+    # La distancia calculada debe exponerse en la respuesta
+    for earthquake in result.seismic.recent.earthquakes:
+        assert earthquake.distance_km is not None
+        assert earthquake.distance_km <= 50
+        assert earthquake.distance_km == round(
+            earthquake.distance_km,
+            2,
+        )

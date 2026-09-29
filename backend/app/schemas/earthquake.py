@@ -43,6 +43,7 @@ class RecentEarthquake(BaseModel):
     longitude: float | None = None
     location: str | None = None
     max_intensity: int | None = None
+    distance_km: float | None = None
 
 
 class RecentEarthquakeListResponse(BaseModel):

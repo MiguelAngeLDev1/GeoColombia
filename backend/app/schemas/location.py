@@ -1,6 +1,9 @@
 from pydantic import BaseModel
 
-from app.schemas.earthquake import Earthquake
+from app.schemas.earthquake import (
+    Earthquake,
+    RecentEarthquake,
+)
 from app.schemas.mining import MiningTitle
 from app.schemas.territory import Department, Municipality
 
@@ -22,11 +25,18 @@ class MiningContext(BaseModel):
     titles: list[MiningTitle]
 
 
+class RecentSeismicContext(BaseModel):
+    count: int
+    returned: int
+    earthquakes: list[RecentEarthquake]
+
+
 class SeismicContext(BaseModel):
     radius_km: float
     count: int
     returned: int
     earthquakes: list[Earthquake]
+    recent: RecentSeismicContext
 
 
 class LocationContextResponse(BaseModel):
