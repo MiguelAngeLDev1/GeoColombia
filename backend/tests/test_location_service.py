@@ -19,11 +19,18 @@ from app.schemas.territory import (
     TerritoryCoordinates,
     TerritoryResponse,
 )
+from app.schemas.weather import (
+    CurrentWeather,
+    DailyWeather,
+    HourlyWeather,
+    WeatherCoordinates,
+    WeatherResponse,
+)
 from app.services.location_service import LocationService
 
 
 @pytest.mark.asyncio
-async def test_get_location_context_combines_territory_mining_and_seismic_data(
+async def test_get_location_context_combines_territory_mining_seismic_and_weather_data(
     monkeypatch,
 ):
     service = LocationService()
@@ -127,9 +134,87 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
                     ),
                     latitude=8.37,
                     longitude=-72.86,
-                    location="Sardinata - Norte de Santander, Colombia",
+                    location=(
+                        "Sardinata - Norte de Santander, Colombia"
+                    ),
                     max_intensity=3,
                 )
+            ],
+        )
+
+    async def mock_get_weather(
+        latitude: float,
+        longitude: float,
+        forecast_days: int = 7,
+        hourly_limit: int = 24,
+    ):
+        return WeatherResponse(
+            source="Open-Meteo",
+            timezone="America/Bogota",
+            coordinates=WeatherCoordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            current=CurrentWeather(
+                observed_at="2026-10-04T21:30",
+                temperature_c=21.5,
+                feels_like_c=23.6,
+                humidity_percent=75,
+                precipitation_mm=0.0,
+                rain_mm=0.0,
+                is_raining=False,
+                weather_code=3,
+                condition="Overcast",
+                cloud_cover_percent=91,
+                pressure_hpa=880.8,
+                wind_speed_kmh=1.5,
+                wind_direction_deg=306,
+                wind_gusts_kmh=6.5,
+            ),
+            hourly=[
+                HourlyWeather(
+                    time="2026-10-04T22:00",
+                    temperature_c=21.2,
+                    feels_like_c=23.1,
+                    precipitation_probability_percent=20,
+                    precipitation_mm=0.0,
+                    rain_mm=0.0,
+                    weather_code=3,
+                    condition="Overcast",
+                    cloud_cover_percent=88,
+                    wind_speed_kmh=2.2,
+                ),
+                HourlyWeather(
+                    time="2026-10-04T23:00",
+                    temperature_c=20.4,
+                    feels_like_c=21.7,
+                    precipitation_probability_percent=28,
+                    precipitation_mm=0.0,
+                    rain_mm=0.0,
+                    weather_code=3,
+                    condition="Overcast",
+                    cloud_cover_percent=95,
+                    wind_speed_kmh=3.1,
+                ),
+            ],
+            daily=[
+                DailyWeather(
+                    date="2026-10-04",
+                    weather_code=51,
+                    condition="Light drizzle",
+                    temperature_max_c=26.6,
+                    temperature_min_c=18.0,
+                    feels_like_max_c=30.6,
+                    feels_like_min_c=18.6,
+                    precipitation_sum_mm=0.3,
+                    rain_sum_mm=0.2,
+                    precipitation_probability_max_percent=49,
+                    wind_speed_max_kmh=9.7,
+                    wind_gusts_max_kmh=29.5,
+                    uv_index_max=9.15,
+                    sunrise="2026-10-04T05:47",
+                    sunset="2026-10-04T17:51",
+                ),
             ],
         )
 
@@ -157,6 +242,12 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
         mock_get_recent_earthquakes,
     )
 
+    monkeypatch.setattr(
+        service.weather_service,
+        "get_weather",
+        mock_get_weather,
+    )
+
     result = await service.get_location_context(
         latitude=8.3665,
         longitude=-72.86,
@@ -179,6 +270,36 @@ async def test_get_location_context_combines_territory_mining_and_seismic_data(
     assert result.territory.municipality.area_km2 == 1451.17
 
     assert result.territory.reference_year == 2024
+
+    # Contexto meteorológico
+    assert result.weather.source == "Open-Meteo"
+    assert result.weather.timezone == "America/Bogota"
+
+    assert result.weather.current.temperature_c == 21.5
+    assert result.weather.current.feels_like_c == 23.6
+    assert result.weather.current.humidity_percent == 75
+    assert result.weather.current.is_raining is False
+    assert result.weather.current.condition == "Overcast"
+    assert result.weather.current.wind_speed_kmh == 1.5
+
+    assert result.weather.today is not None
+    assert result.weather.today.temperature_min_c == 18.0
+    assert result.weather.today.temperature_max_c == 26.6
+    assert (
+        result.weather.today.precipitation_probability_max_percent
+        == 49
+    )
+    assert result.weather.today.precipitation_sum_mm == 0.3
+    assert result.weather.today.uv_index_max == 9.15
+
+    assert len(result.weather.next_hours) == 2
+    assert result.weather.next_hours[0].time.hour == 22
+    assert result.weather.next_hours[0].temperature_c == 21.2
+    assert (
+        result.weather.next_hours[0]
+        .precipitation_probability_percent
+        == 20
+    )
 
     # Contexto minero
     assert result.mining.has_titles is True
@@ -327,6 +448,39 @@ async def test_get_location_context_limits_returned_earthquakes(
             data=earthquakes,
         )
 
+    async def mock_get_weather(
+        latitude: float,
+        longitude: float,
+        forecast_days: int = 7,
+        hourly_limit: int = 24,
+    ):
+        return WeatherResponse(
+            source="Open-Meteo",
+            timezone="America/Bogota",
+            coordinates=WeatherCoordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            current=CurrentWeather(
+                observed_at="2026-10-04T21:30",
+                temperature_c=21.5,
+                feels_like_c=23.6,
+                humidity_percent=75,
+                precipitation_mm=0.0,
+                rain_mm=0.0,
+                is_raining=False,
+                weather_code=3,
+                condition="Overcast",
+                cloud_cover_percent=91,
+                pressure_hpa=880.8,
+                wind_speed_kmh=1.5,
+                wind_direction_deg=306,
+                wind_gusts_kmh=6.5,
+            ),
+            hourly=[],
+            daily=[],
+        )
+
     monkeypatch.setattr(
         service.territory_service,
         "get_territory_at_point",
@@ -351,6 +505,12 @@ async def test_get_location_context_limits_returned_earthquakes(
         mock_get_recent_earthquakes,
     )
 
+    monkeypatch.setattr(
+        service.weather_service,
+        "get_weather",
+        mock_get_weather,
+    )
+
     result = await service.get_location_context(
         latitude=3.87,
         longitude=-75.63,
@@ -370,9 +530,18 @@ async def test_get_location_context_limits_returned_earthquakes(
     assert len(result.seismic.recent.earthquakes) == 3
 
     # Deben quedar ordenados del más reciente al más antiguo
-    assert result.seismic.recent.earthquakes[0].id == "SGC2026test010"
-    assert result.seismic.recent.earthquakes[1].id == "SGC2026test009"
-    assert result.seismic.recent.earthquakes[2].id == "SGC2026test008"
+    assert (
+        result.seismic.recent.earthquakes[0].id
+        == "SGC2026test010"
+    )
+    assert (
+        result.seismic.recent.earthquakes[1].id
+        == "SGC2026test009"
+    )
+    assert (
+        result.seismic.recent.earthquakes[2].id
+        == "SGC2026test008"
+    )
 
     # La distancia calculada debe exponerse en la respuesta
     for earthquake in result.seismic.recent.earthquakes:
@@ -382,3 +551,10 @@ async def test_get_location_context_limits_returned_earthquakes(
             earthquake.distance_km,
             2,
         )
+
+    # Weather también forma parte del contexto,
+    # aunque este test esté enfocado en los límites sísmicos.
+    assert result.weather.source == "Open-Meteo"
+    assert result.weather.current.temperature_c == 21.5
+    assert result.weather.today is None
+    assert result.weather.next_hours == []

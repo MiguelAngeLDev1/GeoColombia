@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from app.schemas.earthquake import (
@@ -39,8 +41,44 @@ class SeismicContext(BaseModel):
     recent: RecentSeismicContext
 
 
+class CurrentWeatherContext(BaseModel):
+    observed_at: datetime | None = None
+    temperature_c: float | None = None
+    feels_like_c: float | None = None
+    condition: str | None = None
+    humidity_percent: int | None = None
+    precipitation_mm: float | None = None
+    is_raining: bool
+    wind_speed_kmh: float | None = None
+
+
+class TodayWeatherContext(BaseModel):
+    temperature_min_c: float | None = None
+    temperature_max_c: float | None = None
+    precipitation_probability_max_percent: int | None = None
+    precipitation_sum_mm: float | None = None
+    uv_index_max: float | None = None
+
+
+class NextHourWeatherContext(BaseModel):
+    time: datetime
+    temperature_c: float | None = None
+    condition: str | None = None
+    precipitation_probability_percent: int | None = None
+    rain_mm: float | None = None
+
+
+class WeatherContext(BaseModel):
+    source: str
+    timezone: str
+    current: CurrentWeatherContext
+    today: TodayWeatherContext | None = None
+    next_hours: list[NextHourWeatherContext]
+
+
 class LocationContextResponse(BaseModel):
     location: LocationCoordinates
     territory: TerritoryContext
+    weather: WeatherContext
     mining: MiningContext
     seismic: SeismicContext

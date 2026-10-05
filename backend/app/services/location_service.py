@@ -2,16 +2,21 @@ import asyncio
 from datetime import datetime, timezone
 
 from app.schemas.location import (
+    CurrentWeatherContext,
     LocationContextResponse,
     LocationCoordinates,
     MiningContext,
+    NextHourWeatherContext,
     RecentSeismicContext,
     SeismicContext,
     TerritoryContext,
+    TodayWeatherContext,
+    WeatherContext,
 )
 from app.services.earthquake_service import EarthquakeService
 from app.services.mining_service import MiningService
 from app.services.territory_service import TerritoryService
+from app.services.weather_service import WeatherService
 
 
 class LocationService:
@@ -20,6 +25,7 @@ class LocationService:
         self.earthquake_service = EarthquakeService()
         self.mining_service = MiningService()
         self.territory_service = TerritoryService()
+        self.weather_service = WeatherService()
 
     async def get_location_context(
         self,
@@ -28,13 +34,15 @@ class LocationService:
         radius_km: float = 50,
         earthquake_limit: int = 10,
         recent_earthquake_limit: int = 5,
+        weather_hour_limit: int = 6,
     ) -> LocationContextResponse:
         """
         Obtiene el contexto de una coordenada consultando
-        DANE, ANM y SGC concurrentemente.
+        DANE, ANM, SGC y Open-Meteo concurrentemente.
 
         Incluye:
         - Contexto territorial.
+        - Condiciones meteorológicas.
         - Títulos mineros.
         - Sismicidad histórica cercana.
         - Sismicidad reciente cercana.
@@ -45,6 +53,7 @@ class LocationService:
             mining_result,
             seismic_result,
             recent_seismic_result,
+            weather_result,
         ) = await asyncio.gather(
             self.territory_service.get_territory_at_point(
                 latitude=latitude,
@@ -61,6 +70,12 @@ class LocationService:
             ),
             self.earthquake_service.get_recent_earthquakes(
                 limit=100,
+            ),
+            self.weather_service.get_weather(
+                latitude=latitude,
+                longitude=longitude,
+                forecast_days=1,
+                hourly_limit=weather_hour_limit,
             ),
         )
 
@@ -123,6 +138,53 @@ class LocationService:
             ]
         ]
 
+        # Resumen meteorológico del día actual.
+        today = (
+            weather_result.daily[0]
+            if weather_result.daily
+            else None
+        )
+
+        weather_context = WeatherContext(
+            source=weather_result.source,
+            timezone=weather_result.timezone,
+            current=CurrentWeatherContext(
+                observed_at=weather_result.current.observed_at,
+                temperature_c=weather_result.current.temperature_c,
+                feels_like_c=weather_result.current.feels_like_c,
+                condition=weather_result.current.condition,
+                humidity_percent=weather_result.current.humidity_percent,
+                precipitation_mm=weather_result.current.precipitation_mm,
+                is_raining=weather_result.current.is_raining,
+                wind_speed_kmh=weather_result.current.wind_speed_kmh,
+            ),
+            today=(
+                TodayWeatherContext(
+                    temperature_min_c=today.temperature_min_c,
+                    temperature_max_c=today.temperature_max_c,
+                    precipitation_probability_max_percent=(
+                        today.precipitation_probability_max_percent
+                    ),
+                    precipitation_sum_mm=today.precipitation_sum_mm,
+                    uv_index_max=today.uv_index_max,
+                )
+                if today is not None
+                else None
+            ),
+            next_hours=[
+                NextHourWeatherContext(
+                    time=hour.time,
+                    temperature_c=hour.temperature_c,
+                    condition=hour.condition,
+                    precipitation_probability_percent=(
+                        hour.precipitation_probability_percent
+                    ),
+                    rain_mm=hour.rain_mm,
+                )
+                for hour in weather_result.hourly
+            ],
+        )
+
         return LocationContextResponse(
             location=LocationCoordinates(
                 latitude=latitude,
@@ -133,6 +195,7 @@ class LocationService:
                 municipality=territory_result.municipality,
                 reference_year=territory_result.reference_year,
             ),
+            weather=weather_context,
             mining=MiningContext(
                 has_titles=mining_result.count > 0,
                 count=mining_result.count,
