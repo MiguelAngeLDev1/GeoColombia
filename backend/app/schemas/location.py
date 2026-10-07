@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.earthquake import (
     Earthquake,
@@ -88,10 +88,19 @@ class AlertsContext(BaseModel):
     hydrological: HydrologicalAlertsContext
 
 
+class UnavailableSource(BaseModel):
+    service: str
+    component: str
+    message: str
+
+
 class LocationContextResponse(BaseModel):
     location: LocationCoordinates
-    territory: TerritoryContext
-    weather: WeatherContext
-    alerts: AlertsContext
-    mining: MiningContext
-    seismic: SeismicContext
+    territory: TerritoryContext | None = None
+    weather: WeatherContext | None = None
+    alerts: AlertsContext | None = None
+    mining: MiningContext | None = None
+    seismic: SeismicContext | None = None
+    unavailable_sources: list[UnavailableSource] = Field(
+        default_factory=list,
+    )

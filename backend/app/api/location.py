@@ -47,8 +47,11 @@ async def get_location_context(
 ):
     """
     Obtiene el contexto de una ubicación combinando información
-    territorial del DANE, títulos mineros de la ANM y actividad
-    sísmica del SGC.
+    territorial del DANE, títulos mineros de la ANM, clima,
+    alertas hidrológicas de IDEAM y actividad sísmica del SGC.
+
+    Si un proveedor externo falla, la respuesta puede incluir
+    información parcial y listar la fuente en unavailable_sources.
     """
 
     return await location_service.get_location_context(
