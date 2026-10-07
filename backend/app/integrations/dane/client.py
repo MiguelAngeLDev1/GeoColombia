@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from app.core.exceptions import ExternalServiceError
@@ -5,7 +7,7 @@ from app.core.exceptions import ExternalServiceError
 
 DANE_MUNICIPALITIES_URL = (
     "https://geoportal.dane.gov.co/mparcgis/rest/services/"
-    "MGN2025/Serv_CapasMGN_2025/FeatureServer/317/query"
+    "MGN2025/Serv_CapasMGN_2025/MapServer/317/query"
 )
 
 DANE_MUNICIPALITY_FIELDS = (
@@ -33,9 +35,19 @@ class DANEClient:
         Geoestadístico Nacional del DANE.
         """
 
+        geometry = json.dumps(
+            {
+                "x": longitude,
+                "y": latitude,
+                "spatialReference": {
+                    "wkid": 4326,
+                },
+            }
+        )
+
         params = {
             "where": "1=1",
-            "geometry": f"{longitude},{latitude}",
+            "geometry": geometry,
             "geometryType": "esriGeometryPoint",
             "inSR": "4326",
             "spatialRel": "esriSpatialRelIntersects",
