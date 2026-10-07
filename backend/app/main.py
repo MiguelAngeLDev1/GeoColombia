@@ -6,6 +6,7 @@ from app.api.mining import router as mining_router
 from app.api.weather import router as weather_router
 from app.core.exception_handlers import external_service_error_handler
 from app.core.exceptions import ExternalServiceError
+from app.api.alerts import router as alerts_router
 
 
 app = FastAPI(
@@ -28,7 +29,7 @@ app.include_router(earthquakes_router)
 app.include_router(mining_router)
 app.include_router(location_router)
 app.include_router(weather_router)
-
+app.include_router(alerts_router)
 
 @app.get("/")
 def root():

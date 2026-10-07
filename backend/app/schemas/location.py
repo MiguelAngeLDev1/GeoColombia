@@ -8,6 +8,7 @@ from app.schemas.earthquake import (
 )
 from app.schemas.mining import MiningTitle
 from app.schemas.territory import Department, Municipality
+from app.schemas.alerts import HydrologicalAlert
 
 
 class LocationCoordinates(BaseModel):
@@ -76,9 +77,21 @@ class WeatherContext(BaseModel):
     next_hours: list[NextHourWeatherContext]
 
 
+class HydrologicalAlertsContext(BaseModel):
+    has_alerts: bool
+    count: int
+    alerts: list[HydrologicalAlert]
+
+
+class AlertsContext(BaseModel):
+    source: str
+    hydrological: HydrologicalAlertsContext
+
+
 class LocationContextResponse(BaseModel):
     location: LocationCoordinates
     territory: TerritoryContext
     weather: WeatherContext
+    alerts: AlertsContext
     mining: MiningContext
     seismic: SeismicContext

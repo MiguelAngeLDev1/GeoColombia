@@ -2,7 +2,9 @@ import asyncio
 from datetime import datetime, timezone
 
 from app.schemas.location import (
+    AlertsContext,
     CurrentWeatherContext,
+    HydrologicalAlertsContext,
     LocationContextResponse,
     LocationCoordinates,
     MiningContext,
@@ -13,6 +15,7 @@ from app.schemas.location import (
     TodayWeatherContext,
     WeatherContext,
 )
+from app.services.alert_service import AlertService
 from app.services.earthquake_service import EarthquakeService
 from app.services.mining_service import MiningService
 from app.services.territory_service import TerritoryService
@@ -26,6 +29,7 @@ class LocationService:
         self.mining_service = MiningService()
         self.territory_service = TerritoryService()
         self.weather_service = WeatherService()
+        self.alert_service = AlertService()
 
     async def get_location_context(
         self,
@@ -38,11 +42,12 @@ class LocationService:
     ) -> LocationContextResponse:
         """
         Obtiene el contexto de una coordenada consultando
-        DANE, ANM, SGC y Open-Meteo concurrentemente.
+        DANE, ANM, SGC, Open-Meteo e IDEAM concurrentemente.
 
         Incluye:
         - Contexto territorial.
         - Condiciones meteorológicas.
+        - Alertas hidrológicas.
         - Títulos mineros.
         - Sismicidad histórica cercana.
         - Sismicidad reciente cercana.
@@ -54,6 +59,7 @@ class LocationService:
             seismic_result,
             recent_seismic_result,
             weather_result,
+            hydrological_alerts_result,
         ) = await asyncio.gather(
             self.territory_service.get_territory_at_point(
                 latitude=latitude,
@@ -76,6 +82,10 @@ class LocationService:
                 longitude=longitude,
                 forecast_days=1,
                 hourly_limit=weather_hour_limit,
+            ),
+            self.alert_service.get_hydrological_alerts(
+                latitude=latitude,
+                longitude=longitude,
             ),
         )
 
@@ -185,6 +195,18 @@ class LocationService:
             ],
         )
 
+        # Alertas oficiales de IDEAM.
+        alerts_context = AlertsContext(
+            source=hydrological_alerts_result.source,
+            hydrological=HydrologicalAlertsContext(
+                has_alerts=(
+                    hydrological_alerts_result.has_alerts
+                ),
+                count=hydrological_alerts_result.count,
+                alerts=hydrological_alerts_result.alerts,
+            ),
+        )
+
         return LocationContextResponse(
             location=LocationCoordinates(
                 latitude=latitude,
@@ -196,6 +218,7 @@ class LocationService:
                 reference_year=territory_result.reference_year,
             ),
             weather=weather_context,
+            alerts=alerts_context,
             mining=MiningContext(
                 has_titles=mining_result.count > 0,
                 count=mining_result.count,

@@ -2,6 +2,11 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.schemas.alerts import (
+    AlertCoordinates,
+    HydrologicalAlert,
+    HydrologicalAlertsResponse,
+)
 from app.schemas.earthquake import (
     Coordinates,
     Earthquake,
@@ -30,7 +35,7 @@ from app.services.location_service import LocationService
 
 
 @pytest.mark.asyncio
-async def test_get_location_context_combines_territory_mining_seismic_and_weather_data(
+async def test_get_location_context_combines_all_sources(
     monkeypatch,
 ):
     service = LocationService()
@@ -218,6 +223,35 @@ async def test_get_location_context_combines_territory_mining_seismic_and_weathe
             ],
         )
 
+    async def mock_get_hydrological_alerts(
+        latitude: float,
+        longitude: float,
+    ):
+        return HydrologicalAlertsResponse(
+            source="IDEAM",
+            coordinates=AlertCoordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            has_alerts=True,
+            count=1,
+            alerts=[
+                HydrologicalAlert(
+                    id=50,
+                    level="yellow",
+                    level_code=1,
+                    level_label="ALERTA AMARILLA",
+                    department="NORTE DE SANTANDER",
+                    hydrographic_area_code=1,
+                    hydrographic_area="Caribe",
+                    hydrographic_zone_code=16,
+                    hydrographic_zone="Catatumbo",
+                    hydrographic_subzone_code=1605,
+                    hydrographic_subzone="Río Sardinata",
+                )
+            ],
+        )
+
     monkeypatch.setattr(
         service.territory_service,
         "get_territory_at_point",
@@ -248,6 +282,12 @@ async def test_get_location_context_combines_territory_mining_seismic_and_weathe
         mock_get_weather,
     )
 
+    monkeypatch.setattr(
+        service.alert_service,
+        "get_hydrological_alerts",
+        mock_get_hydrological_alerts,
+    )
+
     result = await service.get_location_context(
         latitude=8.3665,
         longitude=-72.86,
@@ -261,13 +301,19 @@ async def test_get_location_context_combines_territory_mining_seismic_and_weathe
     # Contexto territorial
     assert result.territory.department is not None
     assert result.territory.department.code == "54"
-    assert result.territory.department.name == "Norte De Santander"
+    assert (
+        result.territory.department.name
+        == "Norte De Santander"
+    )
 
     assert result.territory.municipality is not None
     assert result.territory.municipality.code == "54720"
     assert result.territory.municipality.name == "Sardinata"
     assert result.territory.municipality.type == "Municipio"
-    assert result.territory.municipality.area_km2 == 1451.17
+    assert (
+        result.territory.municipality.area_km2
+        == 1451.17
+    )
 
     assert result.territory.reference_year == 2024
 
@@ -286,19 +332,68 @@ async def test_get_location_context_combines_territory_mining_seismic_and_weathe
     assert result.weather.today.temperature_min_c == 18.0
     assert result.weather.today.temperature_max_c == 26.6
     assert (
-        result.weather.today.precipitation_probability_max_percent
+        result.weather.today
+        .precipitation_probability_max_percent
         == 49
     )
-    assert result.weather.today.precipitation_sum_mm == 0.3
+    assert (
+        result.weather.today.precipitation_sum_mm
+        == 0.3
+    )
     assert result.weather.today.uv_index_max == 9.15
 
     assert len(result.weather.next_hours) == 2
     assert result.weather.next_hours[0].time.hour == 22
-    assert result.weather.next_hours[0].temperature_c == 21.2
+    assert (
+        result.weather.next_hours[0].temperature_c
+        == 21.2
+    )
     assert (
         result.weather.next_hours[0]
         .precipitation_probability_percent
         == 20
+    )
+
+    # Alertas oficiales IDEAM
+    assert result.alerts.source == "IDEAM"
+
+    assert (
+        result.alerts.hydrological.has_alerts
+        is True
+    )
+    assert result.alerts.hydrological.count == 1
+    assert (
+        len(result.alerts.hydrological.alerts)
+        == 1
+    )
+
+    hydrological_alert = (
+        result.alerts.hydrological.alerts[0]
+    )
+
+    assert hydrological_alert.id == 50
+    assert hydrological_alert.type == "hydrological"
+    assert hydrological_alert.level == "yellow"
+    assert hydrological_alert.level_code == 1
+    assert (
+        hydrological_alert.level_label
+        == "ALERTA AMARILLA"
+    )
+    assert (
+        hydrological_alert.department
+        == "NORTE DE SANTANDER"
+    )
+    assert (
+        hydrological_alert.hydrographic_area
+        == "Caribe"
+    )
+    assert (
+        hydrological_alert.hydrographic_zone
+        == "Catatumbo"
+    )
+    assert (
+        hydrological_alert.hydrographic_subzone
+        == "Río Sardinata"
     )
 
     # Contexto minero
@@ -312,7 +407,10 @@ async def test_get_location_context_combines_territory_mining_seismic_and_weathe
     assert mining_title.status == "Activo"
     assert mining_title.stage == "Exploración"
     assert mining_title.minerals == "CARBÓN"
-    assert mining_title.departments == "Norte de Santander"
+    assert (
+        mining_title.departments
+        == "Norte de Santander"
+    )
     assert mining_title.municipalities == "SARDINATA"
 
     # Catálogo sísmico histórico
@@ -331,7 +429,9 @@ async def test_get_location_context_combines_territory_mining_seismic_and_weathe
     assert result.seismic.recent.returned == 1
     assert len(result.seismic.recent.earthquakes) == 1
 
-    recent_earthquake = result.seismic.recent.earthquakes[0]
+    recent_earthquake = (
+        result.seismic.recent.earthquakes[0]
+    )
 
     assert recent_earthquake.id == "SGC2026test001"
     assert recent_earthquake.magnitude == 3.2
@@ -481,6 +581,21 @@ async def test_get_location_context_limits_returned_earthquakes(
             daily=[],
         )
 
+    async def mock_get_hydrological_alerts(
+        latitude: float,
+        longitude: float,
+    ):
+        return HydrologicalAlertsResponse(
+            source="IDEAM",
+            coordinates=AlertCoordinates(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            has_alerts=False,
+            count=0,
+            alerts=[],
+        )
+
     monkeypatch.setattr(
         service.territory_service,
         "get_territory_at_point",
@@ -509,6 +624,12 @@ async def test_get_location_context_limits_returned_earthquakes(
         service.weather_service,
         "get_weather",
         mock_get_weather,
+    )
+
+    monkeypatch.setattr(
+        service.alert_service,
+        "get_hydrological_alerts",
+        mock_get_hydrological_alerts,
     )
 
     result = await service.get_location_context(
@@ -558,3 +679,16 @@ async def test_get_location_context_limits_returned_earthquakes(
     assert result.weather.current.temperature_c == 21.5
     assert result.weather.today is None
     assert result.weather.next_hours == []
+
+    # IDEAM también forma parte del contexto,
+    # aunque este test esté enfocado en los límites sísmicos.
+    assert result.alerts.source == "IDEAM"
+    assert (
+        result.alerts.hydrological.has_alerts
+        is False
+    )
+    assert result.alerts.hydrological.count == 0
+    assert (
+        result.alerts.hydrological.alerts
+        == []
+    )
