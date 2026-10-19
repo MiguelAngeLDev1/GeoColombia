@@ -6,7 +6,9 @@ from app.core.exceptions import ExternalServiceError
 from app.schemas.location import (
     AlertsContext,
     CurrentWeatherContext,
+    FireAlertsContext,
     HydrologicalAlertsContext,
+    LandslideAlertsContext,
     LocationContextResponse,
     LocationCoordinates,
     MiningContext,
@@ -120,6 +122,14 @@ class LocationService:
                 latitude=latitude,
                 longitude=longitude,
             ),
+            self.alert_service.get_landslide_alerts(
+                latitude=latitude,
+                longitude=longitude,
+            ),
+            self.alert_service.get_fire_alerts(
+                latitude=latitude,
+                longitude=longitude,
+            ),
             return_exceptions=True,
         )
 
@@ -161,6 +171,18 @@ class LocationService:
             component="hydrological_alerts",
             unavailable_sources=unavailable_sources,
         )
+        landslide_alerts_result = self._resolve_provider_result(
+            results[6],
+            service="IDEAM",
+            component="landslide_alerts",
+            unavailable_sources=unavailable_sources,
+        )
+        fire_alerts_result = self._resolve_provider_result(
+            results[7],
+            service="IDEAM",
+            component="fire_alerts",
+            unavailable_sources=unavailable_sources,
+        )
 
         if (
             territory_result is None
@@ -169,6 +191,8 @@ class LocationService:
             and recent_seismic_result is None
             and weather_result is None
             and hydrological_alerts_result is None
+            and landslide_alerts_result is None
+            and fire_alerts_result is None
         ):
             raise ExternalServiceError(
                 service="location_context",
@@ -250,15 +274,43 @@ class LocationService:
 
         alerts_context = None
 
-        if hydrological_alerts_result is not None:
+        if (
+            hydrological_alerts_result is not None
+            or landslide_alerts_result is not None
+            or fire_alerts_result is not None
+        ):
             alerts_context = AlertsContext(
-                source=hydrological_alerts_result.source,
-                hydrological=HydrologicalAlertsContext(
-                    has_alerts=(
-                        hydrological_alerts_result.has_alerts
-                    ),
-                    count=hydrological_alerts_result.count,
-                    alerts=hydrological_alerts_result.alerts,
+                source="IDEAM",
+                hydrological=(
+                    HydrologicalAlertsContext(
+                        has_alerts=(
+                            hydrological_alerts_result.has_alerts
+                        ),
+                        count=hydrological_alerts_result.count,
+                        alerts=hydrological_alerts_result.alerts,
+                    )
+                    if hydrological_alerts_result is not None
+                    else None
+                ),
+                landslides=(
+                    LandslideAlertsContext(
+                        has_alerts=(
+                            landslide_alerts_result.has_alerts
+                        ),
+                        count=landslide_alerts_result.count,
+                        alerts=landslide_alerts_result.alerts,
+                    )
+                    if landslide_alerts_result is not None
+                    else None
+                ),
+                fires=(
+                    FireAlertsContext(
+                        has_alerts=fire_alerts_result.has_alerts,
+                        count=fire_alerts_result.count,
+                        alerts=fire_alerts_result.alerts,
+                    )
+                    if fire_alerts_result is not None
+                    else None
                 ),
             )
 

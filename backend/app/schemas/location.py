@@ -8,7 +8,11 @@ from app.schemas.earthquake import (
 )
 from app.schemas.mining import MiningTitle
 from app.schemas.territory import Department, Municipality
-from app.schemas.alerts import HydrologicalAlert
+from app.schemas.alerts import (
+    FireAlert,
+    HydrologicalAlert,
+    LandslideAlert,
+)
 
 
 class LocationCoordinates(BaseModel):
@@ -83,9 +87,23 @@ class HydrologicalAlertsContext(BaseModel):
     alerts: list[HydrologicalAlert]
 
 
+class LandslideAlertsContext(BaseModel):
+    has_alerts: bool
+    count: int
+    alerts: list[LandslideAlert]
+
+
+class FireAlertsContext(BaseModel):
+    has_alerts: bool
+    count: int
+    alerts: list[FireAlert]
+
+
 class AlertsContext(BaseModel):
     source: str
-    hydrological: HydrologicalAlertsContext
+    hydrological: HydrologicalAlertsContext | None = None
+    landslides: LandslideAlertsContext | None = None
+    fires: FireAlertsContext | None = None
 
 
 class UnavailableSource(BaseModel):

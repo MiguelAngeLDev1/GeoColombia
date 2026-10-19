@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 import pytest
@@ -5,8 +6,12 @@ import pytest
 from app.core.exceptions import ExternalServiceError
 from app.schemas.alerts import (
     AlertCoordinates,
+    FireAlert,
+    FireAlertsResponse,
     HydrologicalAlert,
     HydrologicalAlertsResponse,
+    LandslideAlert,
+    LandslideAlertsResponse,
 )
 from app.schemas.earthquake import (
     Coordinates,
@@ -227,7 +232,10 @@ async def _default_weather(
     )
 
 
-async def _default_alerts(latitude: float, longitude: float):
+async def _default_hydrological_alerts(
+    latitude: float,
+    longitude: float,
+):
     return HydrologicalAlertsResponse(
         source="IDEAM",
         coordinates=AlertCoordinates(
@@ -254,7 +262,10 @@ async def _default_alerts(latitude: float, longitude: float):
     )
 
 
-async def _empty_alerts(latitude: float, longitude: float):
+async def _empty_hydrological_alerts(
+    latitude: float,
+    longitude: float,
+):
     return HydrologicalAlertsResponse(
         source="IDEAM",
         coordinates=AlertCoordinates(
@@ -264,6 +275,92 @@ async def _empty_alerts(latitude: float, longitude: float):
         has_alerts=False,
         count=0,
         alerts=[],
+    )
+
+
+async def _default_landslide_alerts(
+    latitude: float,
+    longitude: float,
+):
+    return LandslideAlertsResponse(
+        source="IDEAM",
+        coordinates=AlertCoordinates(
+            latitude=latitude,
+            longitude=longitude,
+        ),
+        has_alerts=True,
+        count=1,
+        alerts=[
+            LandslideAlert(
+                id=341,
+                level="red",
+                level_code=3,
+                level_label="AMENAZA ALTA",
+                department="NORTE DE SANTANDER",
+                municipality="SARDINATA",
+                municipality_code="54720",
+                region="ANDINA",
+            )
+        ],
+    )
+
+
+async def _empty_landslide_alerts(
+    latitude: float,
+    longitude: float,
+):
+    return LandslideAlertsResponse(
+        source="IDEAM",
+        coordinates=AlertCoordinates(
+            latitude=latitude,
+            longitude=longitude,
+        ),
+        has_alerts=False,
+        count=0,
+        alerts=[],
+    )
+
+
+async def _default_fire_alerts(
+    latitude: float,
+    longitude: float,
+):
+    return FireAlertsResponse(
+        source="IDEAM",
+        coordinates=AlertCoordinates(
+            latitude=latitude,
+            longitude=longitude,
+        ),
+        has_alerts=False,
+        count=0,
+        alerts=[],
+    )
+
+
+async def _active_fire_alerts(
+    latitude: float,
+    longitude: float,
+):
+    return FireAlertsResponse(
+        source="IDEAM",
+        coordinates=AlertCoordinates(
+            latitude=latitude,
+            longitude=longitude,
+        ),
+        has_alerts=True,
+        count=1,
+        alerts=[
+            FireAlert(
+                id=3,
+                level="orange",
+                level_code=2,
+                level_label="AMENAZA MODERADA",
+                department="CUNDINAMARCA",
+                municipality="SOACHA",
+                municipality_code="25754",
+                region="ANDINA",
+            )
+        ],
     )
 
 
@@ -286,7 +383,9 @@ def patch_providers(
     nearby=None,
     recent=None,
     weather=None,
-    alerts=None,
+    hydrological=None,
+    landslides=None,
+    fires=None,
 ):
     monkeypatch.setattr(
         service.territory_service,
@@ -316,7 +415,17 @@ def patch_providers(
     monkeypatch.setattr(
         service.alert_service,
         "get_hydrological_alerts",
-        alerts or _default_alerts,
+        hydrological or _default_hydrological_alerts,
+    )
+    monkeypatch.setattr(
+        service.alert_service,
+        "get_landslide_alerts",
+        landslides or _default_landslide_alerts,
+    )
+    monkeypatch.setattr(
+        service.alert_service,
+        "get_fire_alerts",
+        fires or _default_fire_alerts,
     )
 
 
@@ -409,10 +518,25 @@ async def test_get_location_context_combines_all_sources(
     )
 
     assert result.alerts is not None
+    assert result.alerts is not None
     assert result.alerts.source == "IDEAM"
+    assert result.alerts.hydrological is not None
     assert result.alerts.hydrological.has_alerts is True
     assert result.alerts.hydrological.count == 1
     assert len(result.alerts.hydrological.alerts) == 1
+
+    assert result.alerts.landslides is not None
+    assert result.alerts.landslides.has_alerts is True
+    assert result.alerts.landslides.count == 1
+    assert (
+        result.alerts.landslides.alerts[0].municipality_code
+        == "54720"
+    )
+
+    assert result.alerts.fires is not None
+    assert result.alerts.fires.has_alerts is False
+    assert result.alerts.fires.count == 0
+    assert result.alerts.fires.alerts == []
 
     hydrological_alert = (
         result.alerts.hydrological.alerts[0]
@@ -621,7 +745,9 @@ async def test_get_location_context_limits_returned_earthquakes(
         nearby=mock_get_nearby_earthquakes,
         recent=mock_get_recent_earthquakes,
         weather=mock_get_weather,
-        alerts=_empty_alerts,
+        hydrological=_empty_hydrological_alerts,
+        landslides=_empty_landslide_alerts,
+        fires=_default_fire_alerts,
     )
 
     result = await service.get_location_context(
@@ -671,10 +797,14 @@ async def test_get_location_context_limits_returned_earthquakes(
     assert result.weather.next_hours == []
 
     assert result.alerts is not None
+    assert result.alerts is not None
     assert result.alerts.source == "IDEAM"
+    assert result.alerts.hydrological is not None
     assert result.alerts.hydrological.has_alerts is False
     assert result.alerts.hydrological.count == 0
     assert result.alerts.hydrological.alerts == []
+    assert result.alerts.landslides is not None
+    assert result.alerts.fires is not None
 
 
 @pytest.mark.asyncio
@@ -768,14 +898,125 @@ async def test_get_location_context_open_meteo_failure_is_partial(
 
 
 @pytest.mark.asyncio
-async def test_get_location_context_ideam_failure_is_partial(
+async def test_get_location_context_hydrological_failure_is_partial(
     monkeypatch,
 ):
     service = LocationService()
     patch_providers(
         monkeypatch,
         service,
-        alerts=_fail("IDEAM", "IDEAM unavailable"),
+        hydrological=_fail(
+            "IDEAM",
+            "IDEAM hydrological unavailable",
+        ),
+    )
+
+    result = await service.get_location_context(
+        latitude=8.3665,
+        longitude=-72.86,
+        radius_km=50,
+    )
+
+    assert result.alerts is not None
+    assert result.alerts.hydrological is None
+    assert result.alerts.landslides is not None
+    assert result.alerts.fires is not None
+    assert result.territory is not None
+    assert result.weather is not None
+    assert result.mining is not None
+    assert result.seismic is not None
+    assert len(result.unavailable_sources) == 1
+    assert_unavailable(
+        result,
+        service="IDEAM",
+        component="hydrological_alerts",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_location_context_landslides_failure_is_partial(
+    monkeypatch,
+):
+    service = LocationService()
+    patch_providers(
+        monkeypatch,
+        service,
+        landslides=_fail(
+            "IDEAM",
+            "IDEAM landslides unavailable",
+        ),
+    )
+
+    result = await service.get_location_context(
+        latitude=8.3665,
+        longitude=-72.86,
+        radius_km=50,
+    )
+
+    assert result.alerts is not None
+    assert result.alerts.hydrological is not None
+    assert result.alerts.landslides is None
+    assert result.alerts.fires is not None
+    assert len(result.unavailable_sources) == 1
+    assert_unavailable(
+        result,
+        service="IDEAM",
+        component="landslide_alerts",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_location_context_fires_failure_is_partial(
+    monkeypatch,
+):
+    service = LocationService()
+    patch_providers(
+        monkeypatch,
+        service,
+        fires=_fail(
+            "IDEAM",
+            "IDEAM fires unavailable",
+        ),
+    )
+
+    result = await service.get_location_context(
+        latitude=8.3665,
+        longitude=-72.86,
+        radius_km=50,
+    )
+
+    assert result.alerts is not None
+    assert result.alerts.hydrological is not None
+    assert result.alerts.landslides is not None
+    assert result.alerts.fires is None
+    assert len(result.unavailable_sources) == 1
+    assert_unavailable(
+        result,
+        service="IDEAM",
+        component="fire_alerts",
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_location_context_all_ideam_components_fail(
+    monkeypatch,
+):
+    service = LocationService()
+    patch_providers(
+        monkeypatch,
+        service,
+        hydrological=_fail(
+            "IDEAM",
+            "IDEAM hydrological unavailable",
+        ),
+        landslides=_fail(
+            "IDEAM",
+            "IDEAM landslides unavailable",
+        ),
+        fires=_fail(
+            "IDEAM",
+            "IDEAM fires unavailable",
+        ),
     )
 
     result = await service.get_location_context(
@@ -786,14 +1027,21 @@ async def test_get_location_context_ideam_failure_is_partial(
 
     assert result.alerts is None
     assert result.territory is not None
-    assert result.weather is not None
-    assert result.mining is not None
-    assert result.seismic is not None
-    assert len(result.unavailable_sources) == 1
+    assert len(result.unavailable_sources) == 3
     assert_unavailable(
         result,
         service="IDEAM",
         component="hydrological_alerts",
+    )
+    assert_unavailable(
+        result,
+        service="IDEAM",
+        component="landslide_alerts",
+    )
+    assert_unavailable(
+        result,
+        service="IDEAM",
+        component="fire_alerts",
     )
 
 
@@ -911,7 +1159,18 @@ async def test_get_location_context_all_providers_fail(
         nearby=_fail("SGC", "SGC nearby unavailable"),
         recent=_fail("SGC", "SGC recent unavailable"),
         weather=_fail("Open-Meteo", "Open-Meteo unavailable"),
-        alerts=_fail("IDEAM", "IDEAM unavailable"),
+        hydrological=_fail(
+            "IDEAM",
+            "IDEAM hydrological unavailable",
+        ),
+        landslides=_fail(
+            "IDEAM",
+            "IDEAM landslides unavailable",
+        ),
+        fires=_fail(
+            "IDEAM",
+            "IDEAM fires unavailable",
+        ),
     )
 
     with pytest.raises(ExternalServiceError) as exc_info:
@@ -952,6 +1211,29 @@ async def test_get_location_context_unexpected_error_propagates(
 
 
 @pytest.mark.asyncio
+async def test_get_location_context_cancellation_propagates(
+    monkeypatch,
+):
+    service = LocationService()
+
+    async def cancelled_territory(*args, **kwargs):
+        raise asyncio.CancelledError()
+
+    patch_providers(
+        monkeypatch,
+        service,
+        territory=cancelled_territory,
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await service.get_location_context(
+            latitude=8.3665,
+            longitude=-72.86,
+            radius_km=50,
+        )
+
+
+@pytest.mark.asyncio
 async def test_get_location_context_zero_results_are_not_unavailable(
     monkeypatch,
 ):
@@ -960,7 +1242,9 @@ async def test_get_location_context_zero_results_are_not_unavailable(
         monkeypatch,
         service,
         mining=_empty_mining,
-        alerts=_empty_alerts,
+        hydrological=_empty_hydrological_alerts,
+        landslides=_empty_landslide_alerts,
+        fires=_default_fire_alerts,
     )
 
     result = await service.get_location_context(
@@ -976,8 +1260,13 @@ async def test_get_location_context_zero_results_are_not_unavailable(
 
     assert result.alerts is not None
     assert result.alerts.source == "IDEAM"
+    assert result.alerts.hydrological is not None
     assert result.alerts.hydrological.has_alerts is False
     assert result.alerts.hydrological.count == 0
     assert result.alerts.hydrological.alerts == []
+    assert result.alerts.landslides is not None
+    assert result.alerts.landslides.has_alerts is False
+    assert result.alerts.fires is not None
+    assert result.alerts.fires.has_alerts is False
 
     assert result.unavailable_sources == []
