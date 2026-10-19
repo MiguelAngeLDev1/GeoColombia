@@ -4,8 +4,11 @@ from app.api.earthquakes import router as earthquakes_router
 from app.api.location import router as location_router
 from app.api.mining import router as mining_router
 from app.api.weather import router as weather_router
-from app.core.exception_handlers import external_service_error_handler
-from app.core.exceptions import ExternalServiceError
+from app.core.exception_handlers import (
+    alert_layer_error_handler,
+    external_service_error_handler,
+)
+from app.core.exceptions import AlertLayerError, ExternalServiceError
 from app.api.alerts import router as alerts_router
 
 
@@ -22,6 +25,10 @@ app = FastAPI(
 app.add_exception_handler(
     ExternalServiceError,
     external_service_error_handler,
+)
+app.add_exception_handler(
+    AlertLayerError,
+    alert_layer_error_handler,
 )
 
 

@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Query
 
 from app.schemas.alerts import (
@@ -5,6 +7,7 @@ from app.schemas.alerts import (
     HydrologicalAlertsResponse,
     LandslideAlertsResponse,
 )
+from app.services.alert_layer_service import AlertLayerService
 from app.services.alert_service import AlertService
 
 
@@ -14,6 +17,7 @@ router = APIRouter(
 )
 
 alert_service = AlertService()
+alert_layer_service = AlertLayerService()
 
 
 @router.get(
@@ -85,4 +89,41 @@ async def get_fire_alerts(
     return await alert_service.get_fire_alerts(
         latitude=latitude,
         longitude=longitude,
+    )
+
+
+@router.get(
+    "/layers/{layer_type}",
+    response_model=None,
+    summary="Capa GeoJSON IDEAM por bbox",
+)
+async def get_alert_layer_geojson(
+    layer_type: str,
+    bbox: str = Query(
+        ...,
+        description=(
+            "Ventana WGS84: min_lon,min_lat,max_lon,max_lat "
+            "(ejemplo: -75.40,4.30,-75.05,4.55)"
+        ),
+    ),
+    min_level: int = Query(
+        1,
+        ge=1,
+        le=3,
+        description=(
+            "Nivel mínimo inclusive (ALERTA o PROBABILID)"
+        ),
+    ),
+) -> dict[str, Any]:
+    """
+    Devuelve polígonos oficiales IDEAM en GeoJSON para el bbox.
+
+    Capas: hydrological | landslides | fires.
+    La caché es en memoria y por instancia de proceso.
+    """
+
+    return await alert_layer_service.get_layer_geojson(
+        layer_type=layer_type,
+        bbox=bbox,
+        min_level=min_level,
     )
