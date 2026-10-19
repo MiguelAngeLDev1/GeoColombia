@@ -73,9 +73,8 @@ export function buildLocationSectionSummaries(
           .filter(Boolean)
           .join(' · ') || 'Condiciones disponibles'
 
-  const nearbyUnavailable = unavailable.some(
-    (item) => item.component === 'nearby_earthquakes',
-  )
+  // La UI solo expone actividad reciente (Sismos Sentidos).
+  // El catálogo histórico (nearby) permanece en el contrato pero no en el resumen.
   const recentUnavailable = unavailable.some(
     (item) => item.component === 'recent_earthquakes',
   )
@@ -83,46 +82,16 @@ export function buildLocationSectionSummaries(
   let seismicState: SectionSummary['state']
   let seismicDetail: string
 
-  if (data.seismic == null && nearbyUnavailable && recentUnavailable) {
+  if (recentUnavailable || data.seismic == null) {
     seismicState = 'source_unavailable'
-    seismicDetail = 'SGC: fuente temporalmente no disponible'
-  } else if (data.seismic == null) {
-    seismicState = 'source_unavailable'
-    seismicDetail = unavailableDetail(
-      unavailable,
-      nearbyUnavailable ? 'nearby_earthquakes' : 'recent_earthquakes',
-    )
+    seismicDetail = unavailableDetail(unavailable, 'recent_earthquakes')
+  } else if (data.seismic.recent.count === 0) {
+    seismicState = 'empty_ok'
+    seismicDetail =
+      'Sin eventos recientes de Sismos Sentidos con epicentro en el radio'
   } else {
-    const parts: string[] = []
-
-    if (nearbyUnavailable) {
-      parts.push('Sismos cercanos no disponibles')
-    } else if (data.seismic.count === 0) {
-      parts.push(`Sin sismos en ${data.seismic.radius_km} km`)
-    } else {
-      parts.push(
-        `${data.seismic.count} sismo(s) en ${data.seismic.radius_km} km`,
-      )
-    }
-
-    if (recentUnavailable) {
-      parts.push('Catálogo reciente no disponible')
-    } else if (data.seismic.recent.count === 0) {
-      parts.push('Sin sismos recientes en el radio')
-    } else {
-      parts.push(
-        `${data.seismic.recent.count} reciente(s) en el radio`,
-      )
-    }
-
-    const bothEmpty =
-      !nearbyUnavailable &&
-      !recentUnavailable &&
-      data.seismic.count === 0 &&
-      data.seismic.recent.count === 0
-
-    seismicState = bothEmpty ? 'empty_ok' : 'available'
-    seismicDetail = parts.join(' · ')
+    seismicState = 'available'
+    seismicDetail = `${data.seismic.recent.count} evento(s) reciente(s) con epicentro en el radio`
   }
 
   return [

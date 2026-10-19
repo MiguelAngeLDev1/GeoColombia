@@ -70,6 +70,43 @@ describe('contextSections', () => {
     ).toBe('empty_ok')
   })
 
+  it('resuelve recientes independientemente del fallo de nearby', () => {
+    const seismic = {
+      radius_km: 50,
+      count: 0,
+      returned: 0,
+      earthquakes: [],
+      recent: { count: 1, returned: 1, earthquakes: [] },
+    }
+
+    expect(
+      resolveRecentSeismicSection(seismic, [
+        {
+          service: 'SGC',
+          component: 'nearby_earthquakes',
+          message: 'timeout',
+        },
+      ]),
+    ).toBe('available')
+
+    expect(
+      resolveRecentSeismicSection(
+        { ...seismic, recent: { count: 0, returned: 0, earthquakes: [] } },
+        emptyUnavailable,
+      ),
+    ).toBe('empty_ok')
+
+    expect(
+      resolveRecentSeismicSection(seismic, [
+        {
+          service: 'SGC',
+          component: 'recent_earthquakes',
+          message: 'down',
+        },
+      ]),
+    ).toBe('source_unavailable')
+  })
+
   it('alertas: has_alerts=false, null e IDEAM degradado', () => {
     expect(
       resolveAlertBucketSection(

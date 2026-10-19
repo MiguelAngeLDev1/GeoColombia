@@ -103,15 +103,29 @@ describe('buildLocationSectionSummaries', () => {
     ).toBe('source_unavailable')
   })
 
-  it('revisa unavailable_sources antes de interpretar sismos vacíos', () => {
+  it('resume solo actividad reciente y ignora el catálogo histórico', () => {
     const summaries = buildLocationSectionSummaries(
       baseResponse({
         seismic: {
           radius_km: 50,
-          count: 0,
-          returned: 0,
-          earthquakes: [],
-          recent: { count: 2, returned: 2, earthquakes: [] },
+          count: 12,
+          returned: 10,
+          earthquakes: [
+            {
+              id: 1,
+              magnitude: 4,
+              depth_km: 10,
+              occurred_at: '2008-01-01T00:00:00Z',
+              latitude: 4.4,
+              longitude: -75.2,
+              distance_km: 5,
+            },
+          ],
+          recent: {
+            count: 2,
+            returned: 2,
+            earthquakes: [],
+          },
         },
         unavailable_sources: [
           {
@@ -124,7 +138,44 @@ describe('buildLocationSectionSummaries', () => {
     )
 
     const seismic = summaries.find((item) => item.id === 'seismic')
-    expect(seismic?.detail).toMatch(/Sismos cercanos no disponibles/i)
-    expect(seismic?.detail).not.toMatch(/^Sin sismos en 50 km$/i)
+    expect(seismic?.state).toBe('available')
+    expect(seismic?.detail).toMatch(/2 evento\(s\) reciente\(s\)/i)
+    expect(seismic?.detail).not.toMatch(/12 sismo/i)
+    expect(seismic?.detail).not.toMatch(/Sismos cercanos/i)
+  })
+
+  it('marca recent_earthquakes no disponible sin mezclar nearby', () => {
+    const summaries = buildLocationSectionSummaries(
+      baseResponse({
+        seismic: {
+          radius_km: 50,
+          count: 3,
+          returned: 3,
+          earthquakes: [],
+          recent: { count: 0, returned: 0, earthquakes: [] },
+        },
+        unavailable_sources: [
+          {
+            service: 'SGC',
+            component: 'recent_earthquakes',
+            message: 'timeout',
+          },
+        ],
+      }),
+    )
+
+    const seismic = summaries.find((item) => item.id === 'seismic')
+    expect(seismic?.state).toBe('source_unavailable')
+    expect(seismic?.detail).toMatch(/SGC/i)
+    expect(seismic?.detail).not.toMatch(/Sin eventos recientes/i)
+  })
+
+  it('usa empty_ok cuando no hay eventos recientes en el radio', () => {
+    const summaries = buildLocationSectionSummaries(baseResponse())
+    const seismic = summaries.find((item) => item.id === 'seismic')
+    expect(seismic?.state).toBe('empty_ok')
+    expect(seismic?.detail).toMatch(
+      /Sin eventos recientes de Sismos Sentidos con epicentro en el radio/i,
+    )
   })
 })
