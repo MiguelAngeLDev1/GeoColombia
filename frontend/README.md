@@ -50,4 +50,5 @@ src/
 
 - Identidad visual GeoColombia y mapa interactivo (Leaflet + OpenStreetMap).
 - Selección de punto por clic/toque con coordenadas visibles.
-- Aún no se implementan geolocalización, búsqueda de municipios ni llamadas a la API.
+- Consulta a `GET /api/v1/location/context` con panel de resumen y estados resilientes.
+- Aún no se implementan geolocalización, búsqueda de municipios ni tarjetas detalladas (Fase 4).

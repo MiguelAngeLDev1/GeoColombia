@@ -1,16 +1,20 @@
-import type { SectionUiState, UnavailableSource } from '../types/location'
+import type {
+  LocationContextComponent,
+  SectionUiState,
+  UnavailableSource,
+} from '../types/location'
 
 /**
  * Traduce la semántica del backend (null vs vacío vs unavailable)
  * a estados de UI por sección. Sin lógica de presentación.
  */
 export function resolveSectionState(options: {
-  isLoading: boolean
-  hasError: boolean
+  isLoading?: boolean
+  hasError?: boolean
   sectionPresent: boolean
   isEmptyOk: boolean
   unavailableSources: UnavailableSource[]
-  component: string
+  component: LocationContextComponent | string
 }): SectionUiState {
   if (options.isLoading) {
     return 'loading'
@@ -33,4 +37,15 @@ export function resolveSectionState(options: {
   }
 
   return 'available'
+}
+
+export function findUnavailableSource(
+  unavailableSources: UnavailableSource[],
+  component: LocationContextComponent | string,
+): UnavailableSource | undefined {
+  return unavailableSources.find((item) => item.component === component)
+}
+
+export function formatUnavailableLabel(source: UnavailableSource): string {
+  return `${source.service}: fuente temporalmente no disponible`
 }

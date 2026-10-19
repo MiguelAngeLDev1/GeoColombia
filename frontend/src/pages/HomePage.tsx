@@ -1,13 +1,16 @@
 import { BrandMark } from '../components/BrandMark'
 import { SiteHeader } from '../components/SiteHeader'
+import { LocationResultsPanel } from '../features/location/LocationResultsPanel'
 import { MapView } from '../features/map/MapView'
 import { SelectionStatus } from '../features/map/SelectionStatus'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { useLocationContextQuery } from '../hooks/useLocationContextQuery'
 import { useMapSelection } from '../hooks/useMapSelection'
 
 export function HomePage() {
   useDocumentTitle('GeoColombia — Descubre qué está pasando en Colombia')
   const { selectedPoint, selectPoint } = useMapSelection()
+  const locationQuery = useLocationContextQuery(selectedPoint)
 
   return (
     <div className="relative min-h-dvh overflow-x-hidden bg-geo-ink text-geo-fog">
@@ -31,47 +34,31 @@ export function HomePage() {
           </p>
 
           <p className="max-w-xl text-sm leading-relaxed text-geo-mist/80 sm:text-base">
-            Selecciona un punto en el mapa. Pronto podrás consultar territorio,
-            clima, sismos y alertas oficiales para esa ubicación.
+            Selecciona un punto en el mapa para consultar territorio, clima,
+            sismos y alertas oficiales.
           </p>
         </section>
 
         <SelectionStatus selectedPoint={selectedPoint} />
 
-        <MapView
-          selectedPoint={selectedPoint}
-          onSelectPoint={selectPoint}
-        />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(17rem,0.9fr)] lg:items-start lg:gap-5">
+          <MapView
+            selectedPoint={selectedPoint}
+            onSelectPoint={selectPoint}
+          />
 
-        <section
-          aria-label="Fuentes previstas"
-          className="grid gap-3 border-t border-white/10 pt-6 text-sm text-geo-mist/75 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          <SourceHint label="Territorio" detail="Marco DANE" />
-          <SourceHint label="Clima" detail="Condiciones y pronóstico" />
-          <SourceHint label="Sismos" detail="Catálogo SGC" />
-          <SourceHint label="Alertas" detail="IDEAM oficial" />
-        </section>
+          <div className="lg:sticky lg:top-4">
+            <LocationResultsPanel
+              selectedPoint={selectedPoint}
+              query={locationQuery}
+            />
+          </div>
+        </div>
       </main>
 
       <footer className="relative z-10 border-t border-white/10 py-5 text-center text-xs text-geo-mist/55">
         GeoColombia · Fuentes oficiales colombianas
       </footer>
-    </div>
-  )
-}
-
-function SourceHint({
-  label,
-  detail,
-}: {
-  label: string
-  detail: string
-}) {
-  return (
-    <div className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
-      <p className="font-medium text-geo-fog/90">{label}</p>
-      <p className="mt-0.5 text-geo-mist/65">{detail}</p>
     </div>
   )
 }

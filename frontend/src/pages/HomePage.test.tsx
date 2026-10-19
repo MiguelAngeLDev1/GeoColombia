@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { QueryProvider } from '../components/QueryProvider'
 import { HomePage } from './HomePage'
 
 vi.mock('../features/map/MapView', () => ({
@@ -18,7 +19,11 @@ vi.mock('../features/map/MapView', () => ({
 
 describe('HomePage', () => {
   it('muestra la marca y el eslogan de GeoColombia', () => {
-    render(<HomePage />)
+    render(
+      <QueryProvider>
+        <HomePage />
+      </QueryProvider>,
+    )
 
     expect(
       screen.getByRole('heading', { level: 1 }),
@@ -29,14 +34,21 @@ describe('HomePage', () => {
     ).toBeInTheDocument()
   })
 
-  it('integra el mapa y el estado inicial sin selección', () => {
-    render(<HomePage />)
+  it('integra mapa y panel en estado inicial sin selección', () => {
+    render(
+      <QueryProvider>
+        <HomePage />
+      </QueryProvider>,
+    )
 
     expect(
       screen.getByLabelText('Mapa interactivo de Colombia'),
     ).toBeInTheDocument()
 
     expect(screen.getByText('Sin punto seleccionado')).toBeInTheDocument()
+    expect(
+      screen.getByText('Selecciona un punto en el mapa'),
+    ).toBeInTheDocument()
     expect(screen.getByTestId('map-view-mock')).toHaveAttribute(
       'data-has-selection',
       'false',
