@@ -50,6 +50,7 @@ src/
 
 - Identidad visual GeoColombia y mapa interactivo (Leaflet + OpenStreetMap).
 - Selección de punto por clic/toque con coordenadas visibles.
+- Geolocalización bajo demanda («Usar mi ubicación») sin seguimiento ni `localStorage`.
 - Consulta a `GET /api/v1/location/context` con paneles detallados (territorio, clima, sismos, alertas IDEAM).
 - La minería ANM no se muestra en la UI (el contrato API la conserva).
-- Aún no se implementan geolocalización ni búsqueda de municipios.
+- Aún no se implementa búsqueda de municipios.

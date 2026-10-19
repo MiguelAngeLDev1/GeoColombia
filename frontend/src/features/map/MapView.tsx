@@ -6,6 +6,7 @@ import {
   COLOMBIA_MAP_CENTER,
 } from '../../utils/colombia'
 import { MapClickHandler } from './MapClickHandler'
+import { MapFlyTo, type MapFocusRequest } from './MapFlyTo'
 import { MapResizeFix } from './MapResizeFix'
 import { createSelectionIcon, ensureLeafletDefaultIcons } from './leafletSetup'
 import 'leaflet/dist/leaflet.css'
@@ -20,13 +21,19 @@ const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 interface MapViewProps {
   selectedPoint: MapPoint | null
   onSelectPoint: (point: MapPoint) => void
+  /** Enfoque animado (geolocalización); no implica llamadas HTTP. */
+  focusRequest?: MapFocusRequest | null
 }
 
 /**
  * Mapa interactivo de Colombia (Leaflet + OSM).
  * Solo presentación e interacción cartográfica.
  */
-export function MapView({ selectedPoint, onSelectPoint }: MapViewProps) {
+export function MapView({
+  selectedPoint,
+  onSelectPoint,
+  focusRequest = null,
+}: MapViewProps) {
   const selectionIcon = useMemo(() => createSelectionIcon(), [])
 
   return (
@@ -50,6 +57,7 @@ export function MapView({ selectedPoint, onSelectPoint }: MapViewProps) {
       >
         <TileLayer attribution={OSM_ATTRIBUTION} url={OSM_TILE_URL} />
         <MapResizeFix />
+        <MapFlyTo focusRequest={focusRequest} />
         <MapClickHandler onSelect={onSelectPoint} />
         {selectedPoint ? (
           <Marker

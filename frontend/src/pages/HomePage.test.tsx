@@ -47,6 +47,9 @@ describe('HomePage', () => {
 
     expect(screen.getByText(/Sin punto seleccionado/i)).toBeInTheDocument()
     expect(
+      screen.getByRole('button', { name: /Usar mi ubicación/i }),
+    ).toBeInTheDocument()
+    expect(
       screen.getByText('Selecciona un punto en el mapa'),
     ).toBeInTheDocument()
     expect(screen.getByTestId('map-view-mock')).toHaveAttribute(
