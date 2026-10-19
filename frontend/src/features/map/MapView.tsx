@@ -31,7 +31,7 @@ export function MapView({ selectedPoint, onSelectPoint }: MapViewProps) {
 
   return (
     <div
-      className="geo-map-shell relative isolate h-[min(62dvh,36rem)] min-h-[18rem] overflow-hidden rounded-[1.75rem] border border-white/10 bg-geo-forest/50 shadow-[0_24px_80px_rgba(6,28,24,0.45)] sm:h-[min(68dvh,40rem)] sm:min-h-[22rem]"
+      className="geo-map-shell relative isolate h-[min(58dvh,32rem)] min-h-[16rem] overflow-hidden rounded-[1.5rem] border border-white/10 bg-geo-forest/50 shadow-[0_24px_80px_rgba(6,28,24,0.45)] sm:h-[min(68dvh,40rem)] sm:min-h-[22rem] sm:rounded-[1.75rem]"
       role="region"
       aria-label="Mapa interactivo de Colombia"
     >

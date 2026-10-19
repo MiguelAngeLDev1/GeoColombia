@@ -45,7 +45,7 @@ describe('HomePage', () => {
       screen.getByLabelText('Mapa interactivo de Colombia'),
     ).toBeInTheDocument()
 
-    expect(screen.getByText('Sin punto seleccionado')).toBeInTheDocument()
+    expect(screen.getByText(/Sin punto seleccionado/i)).toBeInTheDocument()
     expect(
       screen.getByText('Selecciona un punto en el mapa'),
     ).toBeInTheDocument()

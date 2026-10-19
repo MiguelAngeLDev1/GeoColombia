@@ -47,7 +47,7 @@ describe('buildLocationSectionSummaries', () => {
     const landslides = summaries.find((item) => item.id === 'alerts-landslides')
 
     expect(landslides?.state).toBe('empty_ok')
-    expect(landslides?.detail).toMatch(/Sin amenaza/i)
+    expect(landslides?.detail).toBe('Sin amenaza reportada')
   })
 
   it('no interpreta alerts=null como ausencia de alertas', () => {

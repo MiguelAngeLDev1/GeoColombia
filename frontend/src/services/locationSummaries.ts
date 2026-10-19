@@ -73,20 +73,6 @@ export function buildLocationSectionSummaries(
           .filter(Boolean)
           .join(' · ') || 'Condiciones disponibles'
 
-  const miningState = resolveSectionState({
-    sectionPresent: data.mining != null,
-    isEmptyOk: data.mining != null && !data.mining.has_titles,
-    unavailableSources: unavailable,
-    component: 'mining',
-  })
-
-  const miningDetail =
-    miningState === 'source_unavailable'
-      ? unavailableDetail(unavailable, 'mining')
-      : miningState === 'empty_ok'
-        ? 'Sin títulos mineros en este punto'
-        : `${data.mining?.count ?? 0} título(s) minero(s)`
-
   const nearbyUnavailable = unavailable.some(
     (item) => item.component === 'nearby_earthquakes',
   )
@@ -159,12 +145,6 @@ export function buildLocationSectionSummaries(
       state: seismicState,
       detail: seismicDetail,
     },
-    {
-      id: 'mining',
-      label: 'Títulos mineros (ANM)',
-      state: asSummaryState(miningState),
-      detail: miningDetail,
-    },
   ]
 }
 
@@ -187,7 +167,7 @@ function buildAlertSummaries(
       label: 'Amenaza por remoción (IDEAM)',
       component: 'landslide_alerts',
       bucket: data.alerts?.landslides ?? null,
-      emptyLabel: 'Sin amenaza de remoción en masa reportada',
+      emptyLabel: 'Sin amenaza reportada',
       availableLabel: (count: number) =>
         `${count} pronóstico(s) de amenaza (no es incidente activo)`,
     },
@@ -196,7 +176,7 @@ function buildAlertSummaries(
       label: 'Amenaza de incendio (IDEAM)',
       component: 'fire_alerts',
       bucket: data.alerts?.fires ?? null,
-      emptyLabel: 'Sin amenaza de incendio reportada',
+      emptyLabel: 'Sin amenaza reportada',
       availableLabel: (count: number) =>
         `${count} pronóstico(s) de amenaza (no es incidente activo)`,
     },
@@ -254,7 +234,8 @@ function asSummaryState(
 export function listUnavailableSourceMessages(
   data: LocationContextResponse,
 ): string[] {
-  return data.unavailable_sources.map(
-    (item) => `${item.service} (${item.component}): ${item.message}`,
-  )
+  // La minería ANM no se expone en la UI; se omite del aviso parcial.
+  return data.unavailable_sources
+    .filter((item) => item.component !== 'mining')
+    .map((item) => `${item.service} (${item.component}): ${item.message}`)
 }

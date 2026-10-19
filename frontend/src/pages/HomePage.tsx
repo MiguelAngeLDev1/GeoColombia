@@ -19,21 +19,21 @@ export function HomePage() {
 
       <SiteHeader />
 
-      <main className="relative z-10 mx-auto flex max-w-6xl flex-col gap-5 px-5 pb-12 pt-6 sm:gap-6 sm:px-8 sm:pt-8 lg:gap-7 lg:pb-16 lg:pt-10">
-        <section className="max-w-3xl space-y-2.5 sm:space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-geo-accent">
+      <main className="relative z-10 mx-auto flex max-w-6xl flex-col gap-3 px-4 pb-10 pt-4 sm:gap-4 sm:px-8 sm:pt-6 lg:gap-5 lg:pb-14 lg:pt-8">
+        <section className="max-w-3xl space-y-1.5 sm:space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-geo-accent sm:text-xs">
             Información territorial de Colombia
           </p>
 
-          <h1 className="font-display text-[1.85rem] leading-[1.08] text-geo-fog sm:text-4xl lg:text-[2.75rem]">
+          <h1 className="font-display text-[1.55rem] leading-[1.08] text-geo-fog sm:text-3xl lg:text-[2.5rem]">
             <BrandMark />
           </h1>
 
-          <p className="max-w-2xl font-display text-lg leading-snug text-geo-mist sm:text-xl lg:text-2xl">
+          <p className="max-w-2xl font-display text-base leading-snug text-geo-mist sm:text-xl">
             Descubre qué está pasando en Colombia.
           </p>
 
-          <p className="max-w-xl text-sm leading-relaxed text-geo-mist/80 sm:text-base">
+          <p className="max-w-xl text-sm leading-relaxed text-geo-mist/80">
             Selecciona un punto en el mapa para consultar territorio, clima,
             sismos y alertas oficiales.
           </p>
@@ -41,13 +41,13 @@ export function HomePage() {
 
         <SelectionStatus selectedPoint={selectedPoint} />
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(17rem,0.9fr)] lg:items-start lg:gap-5">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(20rem,1fr)] lg:items-start lg:gap-5">
           <MapView
             selectedPoint={selectedPoint}
             onSelectPoint={selectPoint}
           />
 
-          <div className="lg:sticky lg:top-4">
+          <div className="min-w-0 lg:sticky lg:top-4">
             <LocationResultsPanel
               selectedPoint={selectedPoint}
               query={locationQuery}
