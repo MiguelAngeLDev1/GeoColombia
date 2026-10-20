@@ -1,5 +1,9 @@
 import { useMemo } from 'react'
 import { MapContainer, Marker, TileLayer } from 'react-leaflet'
+import { AlertLayerControls } from '../alerts/layers/AlertLayerControls'
+import { AlertLayerLegend } from '../alerts/layers/AlertLayerLegend'
+import { AlertLayersOnMap } from '../alerts/layers/AlertLayersOnMap'
+import { useAlertLayerToggles } from '../../hooks/useAlertLayerToggles'
 import type { MapPoint } from '../../hooks/useMapSelection'
 import {
   COLOMBIA_DEFAULT_ZOOM,
@@ -35,6 +39,7 @@ export function MapView({
   focusRequest = null,
 }: MapViewProps) {
   const selectionIcon = useMemo(() => createSelectionIcon(), [])
+  const { enabled, toggleLayer, anyEnabled } = useAlertLayerToggles()
 
   return (
     <div
@@ -42,6 +47,8 @@ export function MapView({
       role="region"
       aria-label="Mapa interactivo de Colombia"
     >
+      <AlertLayerControls enabled={enabled} onToggle={toggleLayer} />
+      <AlertLayerLegend visible={anyEnabled} />
       <MapContainer
         center={[
           COLOMBIA_MAP_CENTER.latitude,
@@ -58,6 +65,7 @@ export function MapView({
         <TileLayer attribution={OSM_ATTRIBUTION} url={OSM_TILE_URL} />
         <MapResizeFix />
         <MapFlyTo focusRequest={focusRequest} />
+        <AlertLayersOnMap enabled={enabled} />
         <MapClickHandler onSelect={onSelectPoint} />
         {selectedPoint ? (
           <Marker

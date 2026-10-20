@@ -118,3 +118,47 @@
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
+/* Popups de capas IDEAM */
+.geo-map-shell .geo-alert-popup-pane .leaflet-popup-content-wrapper {
+  background: rgba(6, 28, 24, 0.96);
+  color: #e8f0ed;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(232, 240, 237, 0.14);
+  box-shadow: 0 12px 32px rgba(6, 28, 24, 0.55);
+}
+
+.geo-map-shell .geo-alert-popup-pane .leaflet-popup-tip {
+  background: rgba(6, 28, 24, 0.96);
+}
+
+.geo-map-shell .geo-alert-popup-pane .leaflet-popup-content {
+  margin: 0.65rem 0.8rem;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.geo-alert-popup__title {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 13px;
+  color: #e8f0ed;
+}
+
+.geo-alert-popup__row {
+  display: grid;
+  grid-template-columns: 6.2rem 1fr;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.geo-alert-popup__label {
+  color: #b7c9c2;
+}
+
+.geo-alert-popup__note {
+  margin: 0.55rem 0 0;
+  color: #b7c9c2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+

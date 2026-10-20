@@ -36,9 +36,18 @@ vi.mock('react-leaflet', () => ({
       aria-label={props.alt}
     />
   ),
+  GeoJSON: () => <div data-testid="leaflet-geojson" />,
   useMap: () => ({
     invalidateSize: vi.fn(),
     flyTo: vi.fn(),
+    getBounds: () => ({
+      getWest: () => -79,
+      getSouth: () => -4,
+      getEast: () => -67,
+      getNorth: () => 13,
+    }),
+    on: vi.fn(),
+    off: vi.fn(),
   }),
   useMapEvents: () => ({}),
 }))
@@ -46,6 +55,10 @@ vi.mock('react-leaflet', () => ({
 vi.mock('./leafletSetup', () => ({
   ensureLeafletDefaultIcons: vi.fn(),
   createSelectionIcon: vi.fn(() => ({ options: {} })),
+}))
+
+vi.mock('../alerts/layers/AlertLayersOnMap', () => ({
+  AlertLayersOnMap: () => <div data-testid="alert-layers-on-map" />,
 }))
 
 import { MapView } from './MapView'
@@ -91,5 +104,21 @@ describe('MapView', () => {
     const marker = screen.getByTestId('leaflet-marker')
     expect(marker).toHaveAttribute('data-lat', '4.711')
     expect(marker).toHaveAttribute('data-lng', '-74.0721')
+  })
+
+  it('expone controles de capas IDEAM desactivados y conserva el mapa', () => {
+    render(
+      <MapView selectedPoint={null} onSelectPoint={vi.fn()} />,
+    )
+
+    expect(
+      screen.getByLabelText('Capas de alertas IDEAM'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Alertas hidrológicas')).not.toBeChecked()
+    expect(
+      screen.getByLabelText('Amenaza por deslizamientos'),
+    ).not.toBeChecked()
+    expect(screen.getByLabelText('Amenaza por incendios')).not.toBeChecked()
+    expect(screen.getByTestId('leaflet-map-container')).toBeInTheDocument()
   })
 })
