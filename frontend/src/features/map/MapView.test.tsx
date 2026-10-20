@@ -37,6 +37,10 @@ vi.mock('react-leaflet', () => ({
     />
   ),
   GeoJSON: () => <div data-testid="leaflet-geojson" />,
+  CircleMarker: () => <div data-testid="leaflet-circle-marker" />,
+  Popup: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="leaflet-popup">{children}</div>
+  ),
   useMap: () => ({
     invalidateSize: vi.fn(),
     flyTo: vi.fn(),
@@ -59,6 +63,10 @@ vi.mock('./leafletSetup', () => ({
 
 vi.mock('../alerts/layers/AlertLayersOnMap', () => ({
   AlertLayersOnMap: () => <div data-testid="alert-layers-on-map" />,
+}))
+
+vi.mock('../seismic/map/SeismicMarkersOnMap', () => ({
+  SeismicMarkersOnMap: () => <div data-testid="seismic-markers-on-map" />,
 }))
 
 import { MapView } from './MapView'
@@ -106,7 +114,7 @@ describe('MapView', () => {
     expect(marker).toHaveAttribute('data-lng', '-74.0721')
   })
 
-  it('expone controles de capas IDEAM desactivados y conserva el mapa', () => {
+  it('expone controles IDEAM y sismos desactivados, independientes', () => {
     render(
       <MapView selectedPoint={null} onSelectPoint={vi.fn()} />,
     )
@@ -119,6 +127,12 @@ describe('MapView', () => {
       screen.getByLabelText('Amenaza por deslizamientos'),
     ).not.toBeChecked()
     expect(screen.getByLabelText('Amenaza por incendios')).not.toBeChecked()
+    expect(
+      screen.getByLabelText('Capa de sismos recientes'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/Sismos recientes/)).not.toBeChecked()
     expect(screen.getByTestId('leaflet-map-container')).toBeInTheDocument()
+    expect(screen.getByTestId('alert-layers-on-map')).toBeInTheDocument()
+    expect(screen.getByTestId('seismic-markers-on-map')).toBeInTheDocument()
   })
 })

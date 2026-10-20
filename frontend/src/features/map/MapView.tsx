@@ -3,7 +3,11 @@ import { MapContainer, Marker, TileLayer } from 'react-leaflet'
 import { AlertLayerControls } from '../alerts/layers/AlertLayerControls'
 import { AlertLayerLegend } from '../alerts/layers/AlertLayerLegend'
 import { AlertLayersOnMap } from '../alerts/layers/AlertLayersOnMap'
+import { SeismicLayerControls } from '../seismic/map/SeismicLayerControls'
+import { SeismicLayerLegend } from '../seismic/map/SeismicLayerLegend'
+import { SeismicMarkersOnMap } from '../seismic/map/SeismicMarkersOnMap'
 import { useAlertLayerToggles } from '../../hooks/useAlertLayerToggles'
+import { useSeismicLayerToggle } from '../../hooks/useSeismicLayerToggle'
 import type { MapPoint } from '../../hooks/useMapSelection'
 import {
   COLOMBIA_DEFAULT_ZOOM,
@@ -39,7 +43,15 @@ export function MapView({
   focusRequest = null,
 }: MapViewProps) {
   const selectionIcon = useMemo(() => createSelectionIcon(), [])
-  const { enabled, toggleLayer, anyEnabled } = useAlertLayerToggles()
+  const {
+    enabled: alertLayersEnabled,
+    toggleLayer,
+    anyEnabled: anyAlertLayerEnabled,
+  } = useAlertLayerToggles()
+  const {
+    enabled: seismicEnabled,
+    toggle: toggleSeismic,
+  } = useSeismicLayerToggle()
 
   return (
     <div
@@ -47,8 +59,25 @@ export function MapView({
       role="region"
       aria-label="Mapa interactivo de Colombia"
     >
-      <AlertLayerControls enabled={enabled} onToggle={toggleLayer} />
-      <AlertLayerLegend visible={anyEnabled} />
+      <div className="pointer-events-none absolute right-2 top-2 z-[1000] flex max-w-[min(100%-1rem,16.5rem)] flex-col gap-2 sm:right-3 sm:top-3 sm:max-w-[18rem]">
+        <div className="pointer-events-auto">
+          <AlertLayerControls
+            enabled={alertLayersEnabled}
+            onToggle={toggleLayer}
+          />
+        </div>
+        <div className="pointer-events-auto">
+          <SeismicLayerControls
+            enabled={seismicEnabled}
+            onToggle={toggleSeismic}
+          />
+        </div>
+      </div>
+      <AlertLayerLegend
+        visible={anyAlertLayerEnabled}
+        offsetForSeismicLegend={seismicEnabled}
+      />
+      <SeismicLayerLegend visible={seismicEnabled} />
       <MapContainer
         center={[
           COLOMBIA_MAP_CENTER.latitude,
@@ -65,7 +94,11 @@ export function MapView({
         <TileLayer attribution={OSM_ATTRIBUTION} url={OSM_TILE_URL} />
         <MapResizeFix />
         <MapFlyTo focusRequest={focusRequest} />
-        <AlertLayersOnMap enabled={enabled} />
+        <AlertLayersOnMap enabled={alertLayersEnabled} />
+        <SeismicMarkersOnMap
+          enabled={seismicEnabled}
+          ideamLayersActive={anyAlertLayerEnabled}
+        />
         <MapClickHandler onSelect={onSelectPoint} />
         {selectedPoint ? (
           <Marker

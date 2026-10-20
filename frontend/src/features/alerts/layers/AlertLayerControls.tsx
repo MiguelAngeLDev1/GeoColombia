@@ -22,7 +22,7 @@ export function AlertLayerControls({
 }: AlertLayerControlsProps) {
   return (
     <fieldset
-      className="geo-alert-layer-controls pointer-events-auto absolute right-2 top-2 z-[1000] max-w-[min(100%-1rem,16.5rem)] rounded-xl border border-white/15 bg-geo-ink/90 p-2 shadow-lg backdrop-blur-sm sm:right-3 sm:top-3 sm:max-w-[18rem] sm:p-2.5"
+      className="geo-alert-layer-controls pointer-events-auto max-w-[min(100%-1rem,16.5rem)] rounded-xl border border-white/15 bg-geo-ink/90 p-2 shadow-lg backdrop-blur-sm sm:max-w-[18rem] sm:p-2.5"
       aria-label="Capas de alertas IDEAM"
     >
       <legend className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-geo-accent sm:text-[11px]">

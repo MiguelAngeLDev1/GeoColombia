@@ -162,3 +162,22 @@
   line-height: 1.35;
 }
 
+/* Popups de sismos SGC */
+.geo-map-shell .geo-quake-popup-pane .leaflet-popup-content-wrapper {
+  background: rgba(6, 28, 24, 0.96);
+  color: #e8f0ed;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(232, 240, 237, 0.14);
+  box-shadow: 0 12px 32px rgba(6, 28, 24, 0.55);
+}
+
+.geo-map-shell .geo-quake-popup-pane .leaflet-popup-tip {
+  background: rgba(6, 28, 24, 0.96);
+}
+
+.geo-map-shell .geo-quake-popup-pane .leaflet-popup-content {
+  margin: 0.65rem 0.8rem;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
