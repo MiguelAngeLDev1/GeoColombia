@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from app.core.alert_layer_config import (
@@ -23,6 +24,8 @@ from app.services.alert_service import (
     MUNICIPAL_THREAT_LEVEL_LABELS,
     MUNICIPAL_THREAT_LEVELS,
 )
+
+PageFetcher = Callable[[int, int], Awaitable[dict[str, Any]]]
 
 
 AlertLayerType = Literal["hydrological", "landslides", "fires"]
@@ -128,6 +131,68 @@ class AlertLayerService:
         )
         return collection
 
+    async def get_national_layer_geojson(
+        self,
+        *,
+        layer_type: str,
+        min_level: int = 1,
+    ) -> dict[str, Any]:
+        """Vista nacional simplificada vía maxAllowableOffset (grados WGS84)."""
+
+        normalized_layer = self._parse_layer_type(layer_type)
+        min_level_value = self._parse_min_level(min_level)
+        offset = self.config.national_offset_for(normalized_layer)
+
+        cache_key = self._national_cache_key(
+            normalized_layer,
+            offset=offset,
+            min_level=min_level_value,
+        )
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            response = dict(cached)
+            response["cached"] = True
+            return response
+
+        features = await self._fetch_national_features(
+            layer_type=normalized_layer,
+            min_level=min_level_value,
+            max_allowable_offset=offset,
+        )
+
+        collection = {
+            "type": "FeatureCollection",
+            "features": features,
+            "source": "IDEAM",
+            "layer_type": normalized_layer,
+            "mode": "national",
+            "min_level": min_level_value,
+            "max_allowable_offset": offset,
+            "max_allowable_offset_unit": "degrees_wgs84",
+            "count": len(features),
+            "cached": False,
+        }
+
+        payload_bytes = self._encoded_size(collection)
+        if payload_bytes > self.config.national_max_response_bytes:
+            raise AlertLayerError(
+                (
+                    "La respuesta nacional GeoJSON supera el tamaño máximo "
+                    f"permitido ({self.config.national_max_response_bytes} "
+                    "bytes)."
+                ),
+                code="response_too_large",
+                status_code=413,
+            )
+
+        self.cache.set(
+            cache_key,
+            collection,
+            size_bytes=payload_bytes,
+            ttl_seconds=self.config.national_cache_ttl_seconds,
+        )
+        return collection
+
     async def _fetch_all_features(
         self,
         *,
@@ -140,28 +205,11 @@ class AlertLayerService:
         url = LAYER_URLS[layer_type]
         min_lon, min_lat, max_lon, max_lat = bbox
 
-        collected: list[dict[str, Any]] = []
-        seen_ids: set[int] = set()
-        offset = 0
-        page_size = self.config.page_size
-        accumulated_bytes = 0
-        # Cota dura de páginas: evita bucles si IDEAM repite offsets.
-        max_pages = (self.config.max_features // max(page_size, 1)) + 2
-        page_index = 0
-
-        while True:
-            page_index += 1
-            if page_index > max_pages:
-                raise AlertLayerError(
-                    (
-                        "La paginación de IDEAM no terminó de forma "
-                        "segura. Acerque el mapa e intente de nuevo."
-                    ),
-                    code="response_truncated",
-                    status_code=502,
-                )
-
-            raw = await self.ideam_client.query_layer_geojson(
+        async def fetch_page(
+            offset: int,
+            page_size: int,
+        ) -> dict[str, Any]:
+            return await self.ideam_client.query_layer_geojson(
                 url=url,
                 min_lon=min_lon,
                 min_lat=min_lat,
@@ -173,6 +221,125 @@ class AlertLayerService:
                 result_record_count=page_size,
                 timeout_seconds=self.config.request_timeout_seconds,
             )
+
+        return await self._collect_paginated_features(
+            layer_type=layer_type,
+            fetch_page=fetch_page,
+            max_features=self.config.max_features,
+            max_response_bytes=self.config.max_response_bytes,
+            page_size=self.config.page_size,
+            feature_limit_message=(
+                "La ventana consultada contiene demasiadas "
+                f"entidades (máximo {self.config.max_features}). "
+                "Acerque el mapa para reducir el área."
+            ),
+            response_too_large_message=(
+                "La respuesta GeoJSON supera el tamaño máximo "
+                f"permitido ({self.config.max_response_bytes} "
+                "bytes). Acerque el mapa o reduzca el área "
+                "de consulta."
+            ),
+            truncated_message=(
+                "IDEAM indicó una respuesta truncada. "
+                "Acerque el mapa e intente de nuevo."
+            ),
+            stuck_message=(
+                "IDEAM devolvió páginas repetidas sin avance. "
+                "Acerque el mapa e intente de nuevo."
+            ),
+            max_pages_message=(
+                "La paginación de IDEAM no terminó de forma "
+                "segura. Acerque el mapa e intente de nuevo."
+            ),
+        )
+
+    async def _fetch_national_features(
+        self,
+        *,
+        layer_type: AlertLayerType,
+        min_level: int,
+        max_allowable_offset: float,
+    ) -> list[dict[str, Any]]:
+        where = self._build_where(layer_type, min_level)
+        out_fields = LAYER_FIELDS[layer_type]
+        url = LAYER_URLS[layer_type]
+
+        async def fetch_page(
+            offset: int,
+            page_size: int,
+        ) -> dict[str, Any]:
+            return await self.ideam_client.query_national_layer_geojson(
+                url=url,
+                where=where,
+                out_fields=out_fields,
+                max_allowable_offset=max_allowable_offset,
+                result_offset=offset,
+                result_record_count=page_size,
+                timeout_seconds=(
+                    self.config.national_request_timeout_seconds
+                ),
+            )
+
+        return await self._collect_paginated_features(
+            layer_type=layer_type,
+            fetch_page=fetch_page,
+            max_features=self.config.national_max_features,
+            max_response_bytes=self.config.national_max_response_bytes,
+            page_size=self.config.national_page_size,
+            feature_limit_message=(
+                "La capa nacional contiene demasiadas entidades "
+                f"(máximo {self.config.national_max_features}). "
+                "No se truncó la respuesta."
+            ),
+            response_too_large_message=(
+                "La respuesta nacional GeoJSON supera el tamaño máximo "
+                f"permitido ({self.config.national_max_response_bytes} "
+                "bytes)."
+            ),
+            truncated_message=(
+                "IDEAM indicó una respuesta nacional truncada. "
+                "Intente de nuevo más tarde."
+            ),
+            stuck_message=(
+                "IDEAM devolvió páginas nacionales repetidas sin avance."
+            ),
+            max_pages_message=(
+                "La paginación nacional de IDEAM no terminó de forma segura."
+            ),
+        )
+
+    async def _collect_paginated_features(
+        self,
+        *,
+        layer_type: AlertLayerType,
+        fetch_page: PageFetcher,
+        max_features: int,
+        max_response_bytes: int,
+        page_size: int,
+        feature_limit_message: str,
+        response_too_large_message: str,
+        truncated_message: str,
+        stuck_message: str,
+        max_pages_message: str,
+    ) -> list[dict[str, Any]]:
+        collected: list[dict[str, Any]] = []
+        seen_ids: set[int] = set()
+        offset = 0
+        accumulated_bytes = 0
+        # Cota dura de páginas: evita bucles si IDEAM repite offsets.
+        max_pages = (max_features // max(page_size, 1)) + 2
+        page_index = 0
+
+        while True:
+            page_index += 1
+            if page_index > max_pages:
+                raise AlertLayerError(
+                    max_pages_message,
+                    code="response_truncated",
+                    status_code=502,
+                )
+
+            raw = await fetch_page(offset, page_size)
 
             page_features = raw.get("features")
             if page_features is None:
@@ -203,29 +370,17 @@ class AlertLayerService:
                 if object_id in seen_ids:
                     continue
 
-                if len(collected) >= self.config.max_features:
+                if len(collected) >= max_features:
                     raise AlertLayerError(
-                        (
-                            "La ventana consultada contiene demasiadas "
-                            f"entidades (máximo {self.config.max_features}). "
-                            "Acerque el mapa para reducir el área."
-                        ),
+                        feature_limit_message,
                         code="feature_limit_exceeded",
                         status_code=413,
                     )
 
                 feature_bytes = self._encoded_size(normalized)
-                if (
-                    accumulated_bytes + feature_bytes
-                    > self.config.max_response_bytes
-                ):
+                if accumulated_bytes + feature_bytes > max_response_bytes:
                     raise AlertLayerError(
-                        (
-                            "La respuesta GeoJSON supera el tamaño máximo "
-                            f"permitido ({self.config.max_response_bytes} "
-                            "bytes). Acerque el mapa o reduzca el área "
-                            "de consulta."
-                        ),
+                        response_too_large_message,
                         code="response_too_large",
                         status_code=413,
                     )
@@ -244,10 +399,7 @@ class AlertLayerService:
             if page_count < page_size:
                 if exceeded_flag is True:
                     raise AlertLayerError(
-                        (
-                            "IDEAM indicó una respuesta truncada. "
-                            "Acerque el mapa e intente de nuevo."
-                        ),
+                        truncated_message,
                         code="response_truncated",
                         status_code=502,
                     )
@@ -256,10 +408,7 @@ class AlertLayerService:
             # Página completa sin features nuevas: paginación atascada.
             if added_this_page == 0:
                 raise AlertLayerError(
-                    (
-                        "IDEAM devolvió páginas repetidas sin avance. "
-                        "Acerque el mapa e intente de nuevo."
-                    ),
+                    stuck_message,
                     code="response_truncated",
                     status_code=502,
                 )
@@ -305,6 +454,9 @@ class AlertLayerService:
             properties,
             layer_type=layer_type,
         )
+        # No devolver amenaza nula / nivel 0 aunque el where falle.
+        if level < 1:
+            return None
         name = self._feature_name(properties, layer_type=layer_type)
 
         normalized_properties: dict[str, Any] = {
@@ -644,9 +796,22 @@ class AlertLayerService:
         # fusionar bboxes distintos y devolver polígonos incorrectos.
         min_lon, min_lat, max_lon, max_lat = bbox
         return (
-            f"{layer_type}|"
+            f"regional|{layer_type}|"
             f"{min_lon:.8f},{min_lat:.8f},"
             f"{max_lon:.8f},{max_lat:.8f}|"
+            f"{min_level}"
+        )
+
+    def _national_cache_key(
+        self,
+        layer_type: AlertLayerType,
+        *,
+        offset: float,
+        min_level: int,
+    ) -> str:
+        return (
+            f"national|{layer_type}|"
+            f"offset={offset:.8f}|"
             f"{min_level}"
         )
 

@@ -75,6 +75,79 @@ async def test_query_layer_geojson_timeout():
 
 
 @pytest.mark.asyncio
+async def test_query_national_layer_geojson_sends_offset_and_out_sr():
+    payload = {
+        "type": "FeatureCollection",
+        "features": [],
+    }
+    response = Mock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = payload
+
+    with patch(
+        "app.integrations.ideam.client.httpx.AsyncClient.get",
+        new=AsyncMock(return_value=response),
+    ) as mocked_get:
+        result = await IDEAMClient().query_national_layer_geojson(
+            url=IDEAM_HYDROLOGICAL_ALERTS_URL,
+            where="ALERTA>=1",
+            out_fields="OBJECTID,ALERTA,NIVEL_A,NOMSZH,DEP",
+            max_allowable_offset=0.05,
+            result_offset=0,
+            result_record_count=200,
+            timeout_seconds=30.0,
+        )
+
+    assert result == payload
+    params = mocked_get.await_args.kwargs["params"]
+    assert params["outSR"] == "4326"
+    assert params["f"] == "geojson"
+    assert params["returnGeometry"] == "true"
+    assert params["where"] == "ALERTA>=1"
+    assert params["maxAllowableOffset"] == 0.05
+    assert params["orderByFields"] == "OBJECTID ASC"
+    assert params["resultRecordCount"] == 200
+    assert "geometry" not in params
+    assert "geometryPrecision" not in params
+
+
+@pytest.mark.asyncio
+async def test_query_national_layer_geojson_timeout():
+    with patch(
+        "app.integrations.ideam.client.httpx.AsyncClient.get",
+        new=AsyncMock(side_effect=httpx.TimeoutException("t")),
+    ):
+        with pytest.raises(ExternalServiceError) as exc:
+            await IDEAMClient().query_national_layer_geojson(
+                url=IDEAM_HYDROLOGICAL_ALERTS_URL,
+                where="ALERTA>=1",
+                out_fields="OBJECTID,ALERTA",
+                max_allowable_offset=0.05,
+            )
+    assert "tiempo de espera" in exc.value.message
+
+
+@pytest.mark.asyncio
+async def test_query_national_layer_geojson_arcgis_error():
+    response = Mock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {"error": {"message": "fail"}}
+
+    with patch(
+        "app.integrations.ideam.client.httpx.AsyncClient.get",
+        new=AsyncMock(return_value=response),
+    ):
+        with pytest.raises(ExternalServiceError) as exc:
+            await IDEAMClient().query_national_layer_geojson(
+                url=IDEAM_HYDROLOGICAL_ALERTS_URL,
+                where="ALERTA>=1",
+                out_fields="OBJECTID,ALERTA",
+                max_allowable_offset=0.05,
+            )
+    assert "nacional" in exc.value.message.lower()
+
+
+@pytest.mark.asyncio
 async def test_point_query_still_uses_default_timeout_path():
     payload = {"features": []}
     response = Mock()

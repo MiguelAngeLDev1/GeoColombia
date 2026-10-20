@@ -163,6 +163,7 @@ class IDEAMClient:
         Consulta una capa IDEAM por bbox y devuelve GeoJSON crudo.
 
         No altera las consultas por punto existentes.
+        No aplica maxAllowableOffset (detalle regional).
         """
 
         params = {
@@ -191,6 +192,51 @@ class IDEAMClient:
             arcgis_error_message=(
                 "IDEAM respondió con un error al consultar "
                 "la capa GeoJSON solicitada."
+            ),
+            timeout_seconds=timeout_seconds,
+            expect_geojson=True,
+        )
+
+    async def query_national_layer_geojson(
+        self,
+        *,
+        url: str,
+        where: str,
+        out_fields: str,
+        max_allowable_offset: float,
+        result_offset: int = 0,
+        result_record_count: int = 200,
+        timeout_seconds: float = 30.0,
+    ) -> dict:
+        """
+        Consulta nacional simplificada (sin bbox).
+
+        maxAllowableOffset se expresa en unidades de outSR (4326 → grados).
+        No descarga geometrías completas para simplificarlas localmente.
+        """
+
+        params = {
+            "where": where,
+            "outSR": "4326",
+            "outFields": out_fields,
+            "returnGeometry": "true",
+            "f": "geojson",
+            "resultOffset": result_offset,
+            "resultRecordCount": result_record_count,
+            "orderByFields": "OBJECTID ASC",
+            "maxAllowableOffset": max_allowable_offset,
+        }
+
+        return await self._request(
+            url=url,
+            params=params,
+            failure_message=(
+                "No fue posible consultar la capa nacional "
+                "simplificada de IDEAM."
+            ),
+            arcgis_error_message=(
+                "IDEAM respondió con un error al consultar "
+                "la capa nacional simplificada."
             ),
             timeout_seconds=timeout_seconds,
             expect_geojson=True,

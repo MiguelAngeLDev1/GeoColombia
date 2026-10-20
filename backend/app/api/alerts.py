@@ -93,6 +93,36 @@ async def get_fire_alerts(
 
 
 @router.get(
+    "/layers/{layer_type}/national",
+    response_model=None,
+    summary="Capa GeoJSON IDEAM nacional simplificada",
+)
+async def get_alert_layer_national_geojson(
+    layer_type: str,
+    min_level: int = Query(
+        1,
+        ge=1,
+        le=3,
+        description=(
+            "Nivel mínimo inclusive (ALERTA o PROBABILID)"
+        ),
+    ),
+) -> dict[str, Any]:
+    """
+    Vista nacional con polígonos simplificados (maxAllowableOffset).
+
+    Capas: hydrological | landslides | fires.
+    No sustituye al endpoint regional por bbox.
+    La caché es en memoria y por instancia de proceso.
+    """
+
+    return await alert_layer_service.get_national_layer_geojson(
+        layer_type=layer_type,
+        min_level=min_level,
+    )
+
+
+@router.get(
     "/layers/{layer_type}",
     response_model=None,
     summary="Capa GeoJSON IDEAM por bbox",

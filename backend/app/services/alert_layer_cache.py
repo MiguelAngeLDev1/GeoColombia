@@ -55,11 +55,13 @@ class AlertLayerCache:
         value: dict[str, Any],
         *,
         size_bytes: int,
+        ttl_seconds: int | None = None,
     ) -> None:
         if size_bytes <= 0:
             return
 
-        expires_at = time.monotonic() + self.ttl_seconds
+        ttl = self.ttl_seconds if ttl_seconds is None else ttl_seconds
+        expires_at = time.monotonic() + ttl
         with self._lock:
             existing = self._entries.pop(key, None)
             if existing is not None:
