@@ -68,6 +68,10 @@ export const alertLayerCollectionSchema = z.object({
   min_level: z.number().int().optional(),
   count: z.number().int().optional(),
   cached: z.boolean().optional(),
+  /** Presente en respuestas del endpoint nacional (5E.2). */
+  mode: z.literal('national').optional(),
+  max_allowable_offset: z.number().optional(),
+  max_allowable_offset_unit: z.string().optional(),
 })
 
 export type AlertLayerFeature = z.infer<typeof alertLayerFeatureSchema>

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './errors'
 import {
   buildAlertLayerUrl,
+  buildNationalAlertLayerUrl,
   fetchAlertLayer,
+  fetchNationalAlertLayer,
 } from './alertLayers'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -105,6 +107,37 @@ describe('alertLayers API', () => {
       bbox: '-75.4,4.3,-75.05,4.55',
     })
     expect(result.features[0]?.geometry.type).toBe('MultiPolygon')
+  })
+
+  it('construye URL nacional sin bbox', () => {
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    const url = buildNationalAlertLayerUrl({
+      layerType: 'landslides',
+      minLevel: 1,
+    })
+    expect(url).toContain('/api/v1/alerts/layers/landslides/national')
+    expect(url).toContain('min_level=1')
+    expect(url).not.toContain('bbox=')
+  })
+
+  it('valida colección nacional con mode y offset', async () => {
+    const national = {
+      ...sampleCollection,
+      mode: 'national',
+      max_allowable_offset: 0.05,
+      max_allowable_offset_unit: 'degrees_wgs84',
+      bbox: undefined,
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(national)))
+
+    const result = await fetchNationalAlertLayer({
+      layerType: 'hydrological',
+      minLevel: 1,
+    })
+
+    expect(result.mode).toBe('national')
+    expect(result.max_allowable_offset).toBe(0.05)
+    expect(result.features[0]?.properties.level).toBe(2)
   })
 
   it('propaga AbortSignal y errores 413/502', async () => {

@@ -9,8 +9,8 @@ interface AlertLayersOnMapProps {
 }
 
 /**
- * Orquesta viewport, consultas y geometrías dentro del MapContainer.
- * Sin lógica de toggles ni controles UI.
+ * Orquesta viewport, modo nacional/regional, consultas y geometrías.
+ * Una sola geometría por capa (exclusión mutua de modos).
  */
 export function AlertLayersOnMap({ enabled }: AlertLayersOnMapProps) {
   const viewport = useDebouncedMapViewport()
@@ -33,27 +33,33 @@ export function AlertLayersOnMap({ enabled }: AlertLayersOnMapProps) {
     viewport,
   })
 
-  const eligibility = hydrological.eligibility
+  const viewMode = hydrological.viewMode
   const viewportKey =
-    eligibility.status === 'ok' ? eligibility.bbox : 'inactive'
+    viewMode.mode === 'regional'
+      ? `regional:${viewMode.bbox}`
+      : viewMode.mode === 'national'
+        ? 'national'
+        : 'inactive'
 
   return (
     <>
-      {enabled.hydrological && hydrological.canFetch ? (
+      {enabled.hydrological &&
+      hydrological.canFetch &&
+      hydrological.data ? (
         <AlertLayerGeoJson
           layerType="hydrological"
           data={hydrological.data}
           viewportKey={viewportKey}
         />
       ) : null}
-      {enabled.landslides && landslides.canFetch ? (
+      {enabled.landslides && landslides.canFetch && landslides.data ? (
         <AlertLayerGeoJson
           layerType="landslides"
           data={landslides.data}
           viewportKey={viewportKey}
         />
       ) : null}
-      {enabled.fires && fires.canFetch ? (
+      {enabled.fires && fires.canFetch && fires.data ? (
         <AlertLayerGeoJson
           layerType="fires"
           data={fires.data}
@@ -64,7 +70,7 @@ export function AlertLayersOnMap({ enabled }: AlertLayersOnMapProps) {
       <AlertLayerStatusBanner
         anyEnabled={anyEnabled}
         enabled={enabled}
-        eligibility={eligibility}
+        viewMode={viewMode}
         layers={[
           {
             layerType: 'hydrological',

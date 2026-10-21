@@ -1,30 +1,44 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchAlertLayer,
-  type FetchAlertLayerParams,
+  fetchNationalAlertLayer,
 } from '../api/alertLayers'
-import type { AlertLayerType } from '../api/alertLayerSchemas'
+import type { AlertLayerCollection, AlertLayerType } from '../api/alertLayerSchemas'
+import type { MapViewportBounds } from '../utils/alertLayerBbox'
 import {
-  evaluateViewportForAlertLayers,
-  type MapViewportBounds,
-  type ViewportAlertEligibility,
-} from '../utils/alertLayerBbox'
+  isActiveAlertLayerMode,
+  resolveAlertLayerMode,
+  type AlertLayerModeDecision,
+  type AlertLayerViewMode,
+} from '../utils/alertLayerMode'
 
 export const alertLayerQueryKey = (
   layerType: AlertLayerType,
-  bbox: string,
+  mode: AlertLayerViewMode,
+  scope: string,
   minLevel = 1,
-) => ['alert-layer', layerType, bbox, minLevel] as const
+) => ['alert-layer', layerType, mode, scope, minLevel] as const
 
-export function useAlertLayerViewportEligibility(
-  viewport: MapViewportBounds | null,
-): ViewportAlertEligibility {
-  return evaluateViewportForAlertLayers(viewport)
+/**
+ * True si los datos corresponden al modo activo (exclusión mutua).
+ * Evita pintar geometría nacional bajo etiqueta regional y viceversa.
+ */
+export function alertLayerDataMatchesMode(
+  data: AlertLayerCollection | undefined,
+  mode: AlertLayerViewMode | null,
+): data is AlertLayerCollection {
+  if (!data || mode == null) {
+    return false
+  }
+  if (mode === 'national') {
+    return data.mode === 'national'
+  }
+  return data.mode !== 'national'
 }
 
 /**
  * Consulta independiente por capa IDEAM.
- * Solo se habilita si la capa está activa y el viewport es elegible.
+ * Elige endpoint nacional o regional según el viewport (≤1.5° → regional).
  */
 export function useAlertLayerQuery(options: {
   layerType: AlertLayerType
@@ -33,32 +47,42 @@ export function useAlertLayerQuery(options: {
   minLevel?: number
 }) {
   const { layerType, enabled, viewport, minLevel = 1 } = options
-  const eligibility = evaluateViewportForAlertLayers(viewport)
-  const canFetch = enabled && eligibility.status === 'ok'
-  const bbox = eligibility.status === 'ok' ? eligibility.bbox : null
+  const viewMode: AlertLayerModeDecision = resolveAlertLayerMode(viewport)
+  const activeMode = isActiveAlertLayerMode(viewMode) ? viewMode.mode : null
+  const canFetch = enabled && activeMode != null
+
+  const regionalBbox =
+    viewMode.mode === 'regional' ? viewMode.bbox : null
+  const queryScope =
+    viewMode.mode === 'regional'
+      ? viewMode.bbox
+      : viewMode.mode === 'national'
+        ? 'national'
+        : 'idle'
 
   const query = useQuery({
-    queryKey: bbox
-      ? alertLayerQueryKey(layerType, bbox, minLevel)
-      : (['alert-layer', layerType, 'idle'] as const),
-    enabled: canFetch && bbox != null,
+    queryKey:
+      activeMode != null
+        ? alertLayerQueryKey(layerType, activeMode, queryScope, minLevel)
+        : (['alert-layer', layerType, 'idle'] as const),
+    enabled: canFetch,
     queryFn: ({ signal }) => {
-      if (!bbox) {
-        throw new Error('Bbox no disponible')
+      if (viewMode.mode === 'national') {
+        return fetchNationalAlertLayer({ layerType, minLevel }, signal)
       }
-
-      const params: FetchAlertLayerParams = {
-        layerType,
-        bbox,
-        minLevel,
+      if (viewMode.mode === 'regional') {
+        return fetchAlertLayer(
+          { layerType, bbox: viewMode.bbox, minLevel },
+          signal,
+        )
       }
-
-      return fetchAlertLayer(params, signal)
+      throw new Error('Modo de capa IDEAM no disponible')
     },
     staleTime: 60_000,
     gcTime: 5 * 60_000,
+    // No conservar geometría del otro modo durante la transición.
+    placeholderData: undefined,
     retry: (failureCount, error) => {
-      // No reintentar límites del backend (413) ni cancelaciones.
       if (
         error &&
         typeof error === 'object' &&
@@ -74,10 +98,16 @@ export function useAlertLayerQuery(options: {
     },
   })
 
+  const displayData = alertLayerDataMatchesMode(query.data, activeMode)
+    ? query.data
+    : undefined
+
   return {
     ...query,
-    eligibility,
+    data: displayData,
+    viewMode,
+    activeMode,
     canFetch,
-    bbox,
+    bbox: regionalBbox,
   }
 }

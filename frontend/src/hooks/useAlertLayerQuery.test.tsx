@@ -2,7 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useAlertLayerQuery } from './useAlertLayerQuery'
+import {
+  alertLayerDataMatchesMode,
+  alertLayerQueryKey,
+  useAlertLayerQuery,
+} from './useAlertLayerQuery'
 
 function createWrapper() {
   const client = new QueryClient({
@@ -34,13 +38,20 @@ const nationalViewport = {
   north: 13,
 }
 
-const emptyCollection = {
+const emptyRegional = {
   type: 'FeatureCollection',
   features: [],
   source: 'IDEAM',
   layer_type: 'hydrological',
   count: 0,
   cached: false,
+}
+
+const emptyNational = {
+  ...emptyRegional,
+  mode: 'national',
+  max_allowable_offset: 0.05,
+  max_allowable_offset_unit: 'degrees_wgs84',
 }
 
 describe('useAlertLayerQuery', () => {
@@ -66,8 +77,13 @@ describe('useAlertLayerQuery', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('no consulta en zoom nacional (>1.5°)', async () => {
-    const fetchMock = vi.fn()
+  it('consulta endpoint nacional sin bbox cuando span > 1.5°', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(emptyNational), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const { result } = renderHook(
@@ -80,14 +96,18 @@ describe('useAlertLayerQuery', () => {
       { wrapper: createWrapper() },
     )
 
-    expect(result.current.eligibility.status).toBe('too_large')
-    expect(result.current.canFetch).toBe(false)
-    expect(fetchMock).not.toHaveBeenCalled()
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.activeMode).toBe('national')
+    expect(result.current.canFetch).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const url = String(fetchMock.mock.calls[0]?.[0])
+    expect(url).toContain('/api/v1/alerts/layers/landslides/national')
+    expect(url).not.toContain('bbox=')
   })
 
-  it('consulta con AbortSignal cuando el viewport es válido', async () => {
+  it('consulta endpoint regional con bbox cuando span ≤ 1.5°', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(emptyCollection), {
+      new Response(JSON.stringify(emptyRegional), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -105,9 +125,133 @@ describe('useAlertLayerQuery', () => {
     )
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.current.activeMode).toBe('regional')
+    const url = String(fetchMock.mock.calls[0]?.[0])
+    expect(url).toContain('/api/v1/alerts/layers/fires?')
+    expect(url).toContain('bbox=')
+    expect(url).not.toContain('/national')
+  })
+
+  it('consulta con AbortSignal', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(emptyRegional), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(
+      () =>
+        useAlertLayerQuery({
+          layerType: 'fires',
+          enabled: true,
+          viewport: okViewport,
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit
     expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('transición nacional → regional cambia endpoint y query key', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const national = String(url).includes('/national')
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(national ? emptyNational : emptyRegional),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result, rerender } = renderHook(
+      ({ viewport }) =>
+        useAlertLayerQuery({
+          layerType: 'hydrological',
+          enabled: true,
+          viewport,
+        }),
+      {
+        wrapper: createWrapper(),
+        initialProps: { viewport: nationalViewport },
+      },
+    )
+
+    await waitFor(() => expect(result.current.activeMode).toBe('national'))
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.mode).toBe('national')
+
+    rerender({ viewport: okViewport })
+
+    await waitFor(() => expect(result.current.activeMode).toBe('regional'))
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.mode).toBeUndefined()
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/national'))).toBe(
+      true,
+    )
+    expect(
+      fetchMock.mock.calls.some(
+        (c) =>
+          String(c[0]).includes('bbox=') && !String(c[0]).includes('/national'),
+      ),
+    ).toBe(true)
+  })
+
+  it('transición regional → nacional no mezcla geometrías', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      const national = String(url).includes('/national')
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(national ? emptyNational : emptyRegional),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result, rerender } = renderHook(
+      ({ viewport }) =>
+        useAlertLayerQuery({
+          layerType: 'hydrological',
+          enabled: true,
+          viewport,
+        }),
+      {
+        wrapper: createWrapper(),
+        initialProps: { viewport: okViewport },
+      },
+    )
+
+    await waitFor(() => expect(result.current.activeMode).toBe('regional'))
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    rerender({ viewport: nationalViewport })
+
+    await waitFor(() => expect(result.current.activeMode).toBe('national'))
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.mode).toBe('national')
+    expect(
+      alertLayerDataMatchesMode(result.current.data, 'national'),
+    ).toBe(true)
+    expect(
+      alertLayerDataMatchesMode(result.current.data, 'regional'),
+    ).toBe(false)
+  })
+
+  it('usa query keys independientes por modo', () => {
+    expect(alertLayerQueryKey('fires', 'national', 'national', 1)).not.toEqual(
+      alertLayerQueryKey('fires', 'regional', '-75.4,4.3,-75.05,4.55', 1),
+    )
   })
 
   it('ignora resultados obsoletos al cambiar de región', async () => {
@@ -154,7 +298,7 @@ describe('useAlertLayerQuery', () => {
     resolveSecond?.(
       new Response(
         JSON.stringify({
-          ...emptyCollection,
+          ...emptyRegional,
           bbox: [-74.5, 4.5, -74.2, 4.8],
           count: 0,
         }),
@@ -171,7 +315,7 @@ describe('useAlertLayerQuery', () => {
     resolveFirst?.(
       new Response(
         JSON.stringify({
-          ...emptyCollection,
+          ...emptyRegional,
           features: [
             {
               type: 'Feature',
@@ -213,7 +357,7 @@ describe('useAlertLayerQuery', () => {
     )
   })
 
-  it('maneja errores 413/502 de forma independiente por capa', async () => {
+  it('maneja errores 413/422/502 de forma independiente', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -242,5 +386,30 @@ describe('useAlertLayerQuery', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(result.current.error).toMatchObject({ status: 413 })
+  })
+
+  it('acepta capa vacía nacional', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(emptyNational), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    const { result } = renderHook(
+      () =>
+        useAlertLayerQuery({
+          layerType: 'fires',
+          enabled: true,
+          viewport: nationalViewport,
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.data?.features).toEqual([])
   })
 })
