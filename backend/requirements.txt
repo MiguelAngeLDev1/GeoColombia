@@ -1,4 +1,6 @@
-fastapi
-uvicorn[standard]
-httpx
-pydantic
+# GeoColombia API - pinned versions for Python 3.12 (reproducible).
+# Phase 6B: pinned from the validated development environment.
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+httpx==0.28.1
+pydantic==2.13.5

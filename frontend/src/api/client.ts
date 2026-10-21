@@ -3,6 +3,13 @@ import { ApiError, isAbortError } from './errors'
 const trimTrailingSlash = (value: string): string =>
   value.replace(/\/+$/, '')
 
+/**
+ * Base URL de la API.
+ *
+ * - Desarrollo: cadena vacía → rutas relativas `/api/...` (proxy Vite).
+ * - Producción (build): VITE_API_BASE_URL debe ser HTTPS absoluto
+ *   (p. ej. https://api.ejemplo.com), sin barra final.
+ */
 export function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL?.trim()
 
@@ -10,7 +17,18 @@ export function getApiBaseUrl(): string {
     return ''
   }
 
-  return trimTrailingSlash(configured)
+  const base = trimTrailingSlash(configured)
+
+  if (import.meta.env.PROD) {
+    if (!/^https:\/\//i.test(base)) {
+      throw new Error(
+        'VITE_API_BASE_URL debe usar HTTPS en producción ' +
+          '(ejemplo: https://api.ejemplo.com).',
+      )
+    }
+  }
+
+  return base
 }
 
 export function buildApiUrl(path: string): string {

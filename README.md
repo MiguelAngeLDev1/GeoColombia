@@ -1,342 +1,72 @@
-\# GeoColombia
+# GeoColombia
 
+API y mapa web para consultar información territorial oficial de Colombia (SGC, ANM, DANE, IDEAM, Open-Meteo).
 
+## Stack
 
-GeoColombia es una API geoespacial construida con \*\*Python y FastAPI\*\* para centralizar y consultar información territorial de Colombia proveniente de fuentes oficiales.
+- **Backend:** Python 3.12, FastAPI, httpx, Pydantic
+- **Frontend:** React 19, TypeScript, Vite, Tailwind, Leaflet, TanStack Query
+- **Infra prevista:** Azure Container Apps + Azure Static Web Apps (East US 2)
 
+## Funcionalidades
 
+- Contexto de ubicación (`/api/v1/location/context`) con fallos parciales
+- Sismos SGC (recientes, detalle, cercanos)
+- Títulos mineros ANM
+- Clima Open-Meteo
+- Alertas IDEAM (punto + capas regionales/nacionales en el mapa)
+- Visualización Leaflet con capas independientes y sismos SGC
 
-El objetivo del proyecto es permitir que una aplicación pueda consultar una ubicación geográfica y obtener, mediante una única interfaz, información relevante asociada a ese territorio.
+## Arranque rápido
 
-
-
-\## Funcionalidades actuales
-
-
-
-\### Servicio Geológico Colombiano (SGC)
-
-
-
-Integración con el catálogo sísmico del Servicio Geológico Colombiano.
-
-
-
-Permite:
-
-
-
-\- Consultar eventos sísmicos.
-
-\- Buscar sismos alrededor de una coordenada.
-
-\- Definir un radio de búsqueda en kilómetros.
-
-\- Calcular la distancia entre el punto consultado y cada evento.
-
-\- Ordenar los eventos desde el más cercano al más lejano.
-
-
-
-\### Agencia Nacional de Minería (ANM)
-
-
-
-Integración con servicios geográficos de la Agencia Nacional de Minería.
-
-
-
-Permite consultar títulos mineros que intersectan una coordenada determinada y obtener información como:
-
-
-
-\- Código del expediente.
-
-\- Área.
-
-\- Estado.
-
-\- Modalidad.
-
-\- Etapa.
-
-\- Minerales.
-
-\- Departamento.
-
-\- Municipio.
-
-
-
-\### Contexto territorial
-
-
-
-GeoColombia combina diferentes fuentes en una sola consulta.
-
-
-
-Por ejemplo:
-
-
-
-```http
-
-GET /api/v1/location/context?latitude=8.3665\&longitude=-72.86\&radius\_km=50
-
-```
-
-
-
-La respuesta contiene información minera correspondiente al punto consultado y eventos sísmicos encontrados alrededor de la ubicación.
-
-
-
-\## Arquitectura
-
-
-
-```text
-
-&#x20;                    GeoColombia API
-
-&#x20;                          |
-
-&#x20;                      FastAPI
-
-&#x20;                          |
-
-&#x20;             +------------+------------+
-
-&#x20;             |                         |
-
-&#x20;            SGC                       ANM
-
-&#x20;             |                         |
-
-&#x20;      Catálogo sísmico          Títulos mineros
-
-&#x20;             |                         |
-
-&#x20;             +------------+------------+
-
-&#x20;                          |
-
-&#x20;                 Contexto territorial
-
-```
-
-
-
-La aplicación está organizada por responsabilidades:
-
-
-
-```text
-
-backend/app/
-
-├── api/            # Endpoints HTTP
-
-├── core/           # Excepciones y manejo de errores
-
-├── integrations/   # Clientes de servicios externos
-
-│   ├── anm/
-
-│   └── sgc/
-
-├── schemas/        # Modelos Pydantic
-
-├── services/       # Lógica de negocio
-
-└── main.py         # Aplicación FastAPI
-
-```
-
-
-
-\## Tecnologías
-
-
-
-\- Python 3.12
-
-\- FastAPI
-
-\- Pydantic
-
-\- HTTPX
-
-\- Pytest
-
-\- Docker
-
-
-
-\## Ejecución local
-
-
-
-Ubicarse en el backend:
-
-
+### Backend
 
 ```bash
-
 cd backend
-
-```
-
-
-
-Crear un entorno virtual:
-
-
-
-```bash
-
 python -m venv .venv
-
-```
-
-
-
-Activarlo en Windows:
-
-
-
-```powershell
-
-.venv\\Scripts\\Activate.ps1
-
-```
-
-
-
-Instalar las dependencias:
-
-
-
-```bash
-
+.\.venv\Scripts\activate
 pip install -r requirements-dev.txt
-
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Health: `GET http://127.0.0.1:8000/health`
 
-
-Ejecutar la API:
-
-
+### Frontend
 
 ```bash
-
-uvicorn app.main:app --reload
-
+cd frontend
+npm install
+npm run dev
 ```
 
+En desarrollo, `VITE_API_BASE_URL` vacío usa el proxy Vite `/api` → `localhost:8000`.
 
-
-La documentación interactiva estará disponible en:
-
-
-
-```text
-
-http://localhost:8000/docs
-
-```
-
-
-
-\## Docker
-
-
-
-Construir la imagen desde la raíz del proyecto:
-
-
+## Pruebas
 
 ```bash
-
-docker build -t geocolombia-api:dev ./backend
-
+cd backend && pytest
+cd frontend && npm run lint && npm run test && npm run build
 ```
 
+## Configuración y seguridad
 
+Documentación de producción, CORS, variables de entorno, Docker, límites de costes y **Azure CLI personal aislado**:
 
-Ejecutar:
+→ [docs/production-and-security.md](docs/production-and-security.md)
 
+Scripts Azure (cuenta personal únicamente):
 
+- `scripts/azure-geocolombia.ps1`
+- `scripts/Assert-GeoColombiaAzure.ps1`
+- `scripts/enter-geocolombia-azure.ps1`
 
-```bash
+## Notas de interpretación de datos
 
-docker run --rm --name geocolombia-api -p 8000:8000 geocolombia-api:dev
+- Los sismos “recientes” del listado SGC no equivalen necesariamente a las últimas 24 h.
+- Distancia al epicentro no demuestra que un sismo se sintiera en un municipio.
+- Amenazas IDEAM de deslizamientos/incendios son pronósticos, no incidentes confirmados.
+- Geometrías nacionales IDEAM están simplificadas; las regionales son más detalladas.
 
-```
+## Licencia / uso
 
-
-
-La API estará disponible en el puerto `8000`.
-
-
-
-\## Tests
-
-
-
-Desde `backend`:
-
-
-
-```bash
-
-python -m pytest -v
-
-```
-
-
-
-Actualmente el proyecto cuenta con pruebas automatizadas para las integraciones y servicios principales.
-
-
-
-\## Estado del proyecto
-
-
-
-GeoColombia se encuentra en desarrollo activo.
-
-
-
-Actualmente están implementadas las primeras integraciones con:
-
-
-
-\- Servicio Geológico Colombiano.
-
-\- Agencia Nacional de Minería.
-
-\- Consulta unificada de contexto territorial.
-
-
-
-La arquitectura está preparada para incorporar nuevas fuentes geoespaciales y ambientales de Colombia.
-
-
-
-\## Próximos pasos
-
-
-
-\- Despliegue cloud en Azure.
-
-\- CI/CD.
-
-\- Incorporación de nuevas fuentes oficiales.
-
-\- Interfaz web basada en mapas.
-
-\- Consulta territorial interactiva por ubicación.
-
+Proyecto personal. No incluir secretos ni tokens en el repositorio.
