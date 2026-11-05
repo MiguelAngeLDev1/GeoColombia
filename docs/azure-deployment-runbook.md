@@ -1,7 +1,10 @@
 # GeoColombia — Runbook de despliegue Azure
 
-**Estado:** preparación consolidada (Fase 6C.3). **No desplegado.**  
-**Commit base de código app:** `d4c810fe4ee3fbbdacdd80db1c0009df176ff858`
+**Estado:** preparación controlada (Fase 6D.1). **No desplegado.**
+
+**Commit base:** `bada24aed4f1ca5ac585e244a808fbed7ea3dd5d`
+
+**Preflight detallado:** [`azure-deployment-preflight.md`](azure-deployment-preflight.md)
 
 ## 1. Identidad Azure personal (obligatoria)
 
@@ -105,7 +108,9 @@ Scripts (dry-run por defecto; `-DryRun` gana sobre `-Execute`):
 |--------|-----|
 | `Get-GeoColombiaInfraStatus.ps1` | Lectura |
 | `New-GeoColombiaContainerAppsEnvironment.ps1` | CAE |
-| `New-GeoColombiaContainerApp.ps1 -Image …` | ACA |
+| `New-GeoColombiaContainerApp.ps1 -Image …` | ACA **sin** ingress público |
+| `Get-GeoColombiaOperatorPublicIp.ps1` | IP pública operador (no persistir) |
+| `Set-GeoColombiaContainerAppIngressAllowlist.ps1` | Ingress + allowlist Allow |
 | `Set-GeoColombiaContainerAppEnv.ps1` | Env/CORS |
 | `New-GeoColombiaStaticWebApp.ps1` | SWA Free |
 | `Test-GeoColombiaApiEndpoints.ps1 -BaseUrl …` | Smoke |
@@ -120,21 +125,31 @@ Scripts (dry-run por defecto; `-DryRun` gana sobre `-Execute`):
 ### A. Primer despliegue controlado (recomendado ahora)
 
 ```text
-Internet ──X──► FQDN ACA (bloqueado salvo IPs allowlist)
-Tu IP ─────────► ACA IP restrictions (Allow)
-Browser (tú) ──► SWA (opcional) ──► ACA (misma allowlist)
+Internet ──X──► FQDN ACA (Allow solo operator/32)
+Operador ─────► ACA (tras enable+allowlist atómico por YAML)
+Browser (tú) ─► SWA opcional ─► misma allowlist
 ```
+
+**Secuencia segura (scripts):**
+
+1. `New-GeoColombiaContainerApp.ps1` crea la app **sin** `--ingress` (sin FQDN público).
+2. `Get-GeoColombiaOperatorPublicIp.ps1` obtiene CIDR `/32` en memoria (no hardcode, no persistir).
+3. `Set-GeoColombiaContainerAppIngressAllowlist.ps1 -OperatorPublicIpCidr …` ejecuta `ingress enable` y, de inmediato, `access-restriction set` con `action=Allow` (deniega el resto). Si falla tras enable: `ingress disable`.
+4. Verificar `access-restriction list`; prueba positiva `/health` y negativa desde otra red.
+5. No anunciar el FQDN hasta completar el paso 4.
+
+Ventana residual entre enable y set: segundos. Mitigación: no publicar la URL y rollback `ingress disable` automático ante fallo.
 
 | Control | Estado | Coste |
 |---------|--------|-------|
-| ACA ingress IP allowlist (solo tu IP / VPN) | **A verificar en deploy** | ~0 |
-| Alternativa: Easy Auth “Require authentication” | **A verificar en deploy** | ~0 |
-| `API_DOCS_ENABLED=false` | Verificado en Docker 6C.2 | 0 |
-| CORS explícito a SWA | Script listo; URL real pendiente | 0 |
-| maxReplicas=1, límites IDEAM/timeouts | En código / scripts | 0 |
-| Rate limit global en app | **No implementado** (insuficiente solo) | — |
+| Create sin ingress abierto | Scripts 6D.1 | 0 |
+| Allowlist Allow `/32` | Script ingress; verificar en deploy | ~0 |
+| Alternativa Easy Auth | Viable; no preferida vs IP en controlado | ~0 |
+| `API_DOCS_ENABLED=false` | Verificado Docker 6C.2 | 0 |
+| CORS explícito | Script listo; hostname SWA pendiente | 0 |
+| maxReplicas=1 + límites app | Código/scripts | 0 |
 
-Objetivo: validar mapa + API sin exposición anónima mundial.
+**Implicación:** visitantes externos **no** usarán la API mientras la allowlist sea solo tu IP. Controlado ≠ público.
 
 ### B. Publicación pública posterior
 

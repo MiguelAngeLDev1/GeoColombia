@@ -206,10 +206,10 @@ CORS **no** autentica. Cloudflare Free **solo delante del front** **no** protege
 
 ### A. Despliegue controlado (siguiente paso autorizado)
 
-- ACA: **IP allowlist** (tu IP) **o** Easy Auth requerido.
-- SWA Free opcional para UI.
-- Controles verificables nativos Azure, ~USD 0.
-- Rate limit in-memory: **no** usar como única defensa.
+- Crear ACA **sin** ingress; habilitar HTTPS con `ingress enable` + `access-restriction set Allow` inmediato (rollback `disable` si falla). Ver preflight.
+- IP operador vía `Get-GeoColombiaOperatorPublicIp.ps1` (no hardcode).
+- SWA Free opcional; visitantes externos no consumen API allowlisted.
+- Rate limit in-memory: **no** como única defensa.
 
 ### B. Publicación pública (posterior)
 

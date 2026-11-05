@@ -1,24 +1,24 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Planifica (o crea) la Container App del backend GeoColombia.
+  Planifica (o crea) la Container App del backend GeoColombia SIN ingress público.
 
 .DESCRIPTION
-  Por defecto DRY-RUN. Exige imagen GHCR existente (tag) al ejecutar de verdad.
-  Enforce: 0.25 vCPU, 0.5Gi, min=0, max=1, ingress externo HTTPS puerto 8000.
-  No crea ACR. No habilita más de 1 réplica.
+  Por defecto DRY-RUN.
+  La creación segura NO habilita --ingress external.
+  El acceso HTTPS controlado se configura después con:
+    Set-GeoColombiaContainerAppIngressAllowlist.ps1 -OperatorPublicIpCidr <x.x.x.x/32>
+
+  Enforce: 0.25 vCPU, 0.5Gi, min=0, max=1. Sin ACR. Sin tokens en el script.
 
 .PARAMETER Image
-  Referencia completa de imagen, p.ej. ghcr.io/miguelangeldev1/geocolombia-api:sha-abc
+  Referencia GHCR, p.ej. ghcr.io/miguelangeldev1/geocolombia-api:<git-sha>
 
 .PARAMETER Execute
-  Ejecuta creación real (requiere -Image y aprobación previa).
-
-.PARAMETER DryRun
-  Fuerza dry-run.
+  Ejecuta creación real (requiere aprobación previa).
 
 .EXAMPLE
-  .\scripts\New-GeoColombiaContainerApp.ps1 -Image ghcr.io/miguelangeldev1/geocolombia-api:local-placeholder
+  .\scripts\New-GeoColombiaContainerApp.ps1 -Image ghcr.io/miguelangeldev1/geocolombia-api:bada24a
 #>
 
 [CmdletBinding()]
@@ -73,6 +73,7 @@ Write-GeoColombiaInfo ("Modo: {0}" -f $(if ($isDryRun) { 'DRY-RUN' } else { 'EXE
 Write-GeoColombiaInfo ("App: {0}" -f $script:GeoColombiaContainerApp)
 Write-GeoColombiaInfo ("Image: {0}" -f $Image)
 Write-GeoColombiaInfo ("Scale: min={0} max={1} cpu={2} mem={3}" -f $MinReplicas, $MaxReplicas, $Cpu, $Memory)
+Write-GeoColombiaInfo 'Ingress: OMITIDO (sin exposición pública en creación)'
 
 $existing = $null
 try {
@@ -97,17 +98,15 @@ if ($null -ne $existing) {
     }
 }
 
-# Registry credentials: en EXECUTE real se configuran aparte (GHCR secret).
-# Aquí no se embuten tokens.
+# Sin --ingress: no FQDN público en el momento de creación.
+# Registry credentials (GHCR privado): configurar con secretos ACA en fase posterior,
+# nunca embutir tokens aquí.
 $azArgs = @(
     'containerapp', 'create',
     '-g', $script:GeoColombiaResourceGroup,
     '-n', $script:GeoColombiaContainerApp,
     '--environment', $script:GeoColombiaContainerAppsEnvironment,
     '--image', $Image,
-    '--target-port', [string]$script:GeoColombiaTargetPort,
-    '--ingress', 'external',
-    '--transport', 'http',
     '--cpu', $Cpu,
     '--memory', $Memory,
     '--min-replicas', [string]$MinReplicas,
@@ -119,19 +118,21 @@ $azArgs = @(
 )
 
 $result = Invoke-GeoColombiaAzOrPlan -AzArgs $azArgs -IsDryRun $isDryRun `
-    -Description 'Crear Container App (Consumption, scale 0->1, ingress HTTPS)'
+    -Description 'Crear Container App SIN ingress público (Consumption, scale 0->1)'
 
 if (-not $isDryRun -and $result.ExitCode -ne 0) {
     throw "Falló la creación de Container App. ExitCode=$($result.ExitCode) Output=$($result.Output)"
 }
 
-Write-GeoColombiaInfo 'Tras crear: obtener FQDN real con az containerapp show --query properties.configuration.ingress.fqdn'
-Write-GeoColombiaInfo 'Luego configurar CORS_ALLOWED_ORIGINS con el dominio SWA (ver runbook).'
+Write-GeoColombiaInfo 'Siguiente paso seguro:'
+Write-Host '  .\scripts\Get-GeoColombiaOperatorPublicIp.ps1'
+Write-Host '  .\scripts\Set-GeoColombiaContainerAppIngressAllowlist.ps1 -OperatorPublicIpCidr <x.x.x.x/32>'
 
 return [pscustomobject]@{
-    Action = $(if ($isDryRun) { 'planned' } else { 'created' })
-    DryRun = $isDryRun
-    Name   = $script:GeoColombiaContainerApp
-    Image  = $Image
-    Result = $result
+    Action          = $(if ($isDryRun) { 'planned' } else { 'created' })
+    DryRun          = $isDryRun
+    Name            = $script:GeoColombiaContainerApp
+    Image           = $Image
+    IngressEnabled  = $false
+    Result          = $result
 }
